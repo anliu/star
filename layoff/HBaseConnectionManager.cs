@@ -36,5 +36,7 @@ namespace Microsoft.HBase.Client
         public override void ReleaseConnection(object connection)
         {
         }
+
+        public string Credential { get; set; }
     }
 }
