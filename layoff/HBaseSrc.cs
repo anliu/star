@@ -3,9 +3,12 @@ using Microsoft.SqlServer.Dts.Pipeline;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
+using org.apache.hadoop.hbase.rest.protobuf.generated;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -20,6 +23,8 @@ namespace Microsoft.HBase.Client
     ]
     public class HBaseSrc : PipelineComponent
     {
+        private Dictionary<string, PipelineColumnInfo> _bufferColumnInfo;
+        private HBaseClient _hbaseClient;
         internal bool Connected { get; set; }
 
         public override void ProvideComponentProperties()
@@ -81,18 +86,15 @@ namespace Microsoft.HBase.Client
                     throw new Exception("The ConnectionManager " + cm.Name + " is not an HBase connection.");
                 }
 
-                //var hbaseConnection = cmhbase.AcquireConnection(transaction) as SqlConnection;
-                //hbaseConnection.Open();
-
+                this._hbaseClient = cmhbase.AcquireConnection(transaction) as HBaseClient;
                 this.Connected = true;
             }
         }
 
         public override void ReleaseConnections()
         {
-            //if (hbaseConnection != null && hbaseConnection.State != ConnectionState.Closed)
-            //    hbaseConnection.Close();
-
+            // dispose or call CM ReleaseConnections if applicable
+            this._hbaseClient = null;
             this.Connected = false;
         }
 
@@ -238,7 +240,7 @@ namespace Microsoft.HBase.Client
                 var columnType = columnTypeList.Length > i ? columnTypeList[i] : "0";
                 int.TryParse(columnType, out Length);
 
-                var dtstype = Length != 0 ? DataType.DT_WSTR : DataType.DT_NTEXT;
+                var dtstype = Length != 0 ? DataType.DT_WSTR : DataType.DT_IMAGE;
 
                 var columnName = columnList[i];
 
@@ -319,9 +321,148 @@ namespace Microsoft.HBase.Client
             {
                 // validate table existence, columns are always available per
                 // hbase dynamic column model
+                try
+                {
+                    this._hbaseClient.GetTableInfo(propTableName.Value.ToString());
+                }
+                catch (WebException)
+                {
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(HResults.DTS_E_INCORRECTCUSTOMPROPERTYVALUEFOROBJECT,
+                        out bCancel, Constants.PropTableName, ComponentMetaData.IdentificationString);
+                    return DTSValidationStatus.VS_ISBROKEN;
+                }
             }
 
             return DTSValidationStatus.VS_ISVALID;
+        }
+
+        public override void PreExecute()
+        {
+            // baseclass may need to do some work
+            base.PreExecute();
+
+            //get the non-error output
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+
+            if (!this.Connected)
+            {
+                bool bCancel;
+                ErrorSupport.FireError(HResults.DTS_E_CONNECTIONREQUIREDFORREAD, out bCancel);
+                throw new PipelineComponentHResultException(HResults.DTS_E_CONNECTIONREQUIREDFORREAD);
+            }
+
+            // in case outputMain is null, let it throw, just like an assertion
+            this._bufferColumnInfo = new Dictionary<string, PipelineColumnInfo>(outputMain.OutputColumnCollection.Count);
+
+            // buffer layout is only fixed during PreExecute phase, keep a copy
+            // of the buffer column index so that we can set data in PrimeOutput
+            for (var i = 0; i < outputMain.OutputColumnCollection.Count; i++)
+            {
+                var col = outputMain.OutputColumnCollection[i];
+
+                this._bufferColumnInfo[col.Name] = new PipelineColumnInfo()
+                {
+                    BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID),
+                    OutputColumnIndex = i
+                };
+            }
+        }
+
+        public override void PrimeOutput(int outputs, int[] outputIDs, PipelineBuffer[] buffers)
+        {
+            // get output buffers
+            PipelineBuffer bufferMain = buffers[0], bufferError = null;
+
+            // If there is an error output, figure out which output is the main
+            // and which is the error
+            if (outputs == 2)
+            {
+                int iErrorOutID = 0, iErrorOutIndex = 0;
+                GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+
+                if (outputIDs[0] == iErrorOutID)
+                {
+                    bufferMain = buffers[1];
+                    bufferError = buffers[0];
+                }
+                else
+                {
+                    bufferMain = buffers[0];
+                    bufferError = buffers[1];
+                }
+            }
+
+            // get table name
+            var propTableName = ComponentMetaData.CustomPropertyCollection[Constants.PropTableName];
+
+            // create scanner
+            var scanSettings = new Scanner()
+            {
+                batch = 10
+            };
+
+            var scannerInfo = this._hbaseClient.CreateScanner(propTableName.Value.ToString(), scanSettings);
+            CellSet next = null;
+            while ((next = this._hbaseClient.ScannerGetNext(scannerInfo)) != null)
+            {
+                foreach (var row in next.rows)
+                {
+                    // may enter wait
+                    bufferMain.AddRow();
+
+                    // copy row to the buffer
+
+                    // mapping via column name, which is slow but there seems no
+                    // better ways due to the dynamic column model of hbase which
+                    // is core advantage of hbase
+                    // the best we can have might be some kind of merge between
+                    // two column list but it seems not much helpful as we have
+                    // a column dictionary built for free already.
+                    for (var i = 0; i < row.values.Count; i++)
+                    {
+                        // UTF8 seems working so far, use base64 for arbitrary data
+                        // if necessary
+                        var colName = Encoding.UTF8.GetString(row.values[i].column);
+                        if (!this._bufferColumnInfo.ContainsKey(colName))
+                        {
+                            continue;
+                        }
+
+                        var colIndex = this._bufferColumnInfo[colName].BufferColumnIndex;
+                        var colInfo = bufferMain.GetColumnInfo(colIndex);
+
+                        if (colInfo.DataType == DataType.DT_IMAGE)
+                        {
+                            // may need to convert from UTF8 to UTF16 if we use
+                            // DT_NTEXT which might double the memory footprint
+                            // so that we favor of DT_IMAGE for now, try json/xml
+                            // to see if it's already done in the client lib
+                            bufferMain.AddBlobData(colIndex, row.values[i].data);
+                        }
+                        else
+                        {
+                            // UTF8 seems working so far, use base64 for arbitrary data
+                            // if needed
+                            var stringValue = Encoding.UTF8.GetString(row.values[i].data);
+                            var subLength = colInfo.MaxLength;
+
+                            // todo handle redirection for truncation
+                            if (stringValue.Length < colInfo.MaxLength)
+                            {
+                                subLength = stringValue.Length;
+                            }
+
+                            bufferMain.SetString(colIndex, stringValue.Substring(0, subLength));
+                        }
+                    }
+                }
+            }
+
+            // done
+            bufferMain.SetEndOfRowset();
         }
 
         private void SetComponentVersion()

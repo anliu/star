@@ -20,6 +20,7 @@ namespace Microsoft.HBase.Client
     ]
     public class HBaseDest : PipelineComponent
     {
+        private HBaseClient _hbaseClient;
         internal bool Connected { get; set; }
 
         public override void ProvideComponentProperties()
@@ -82,6 +83,7 @@ namespace Microsoft.HBase.Client
                 }
 
                 //var hbaseConnection = cmhbase.AcquireConnection(transaction) as SqlConnection;
+                this._hbaseClient = cmhbase.AcquireConnection(transaction) as HBaseClient;
                 //hbaseConnection.Open();
 
                 this.Connected = true;
@@ -93,6 +95,8 @@ namespace Microsoft.HBase.Client
             //if (hbaseConnection != null && hbaseConnection.State != ConnectionState.Closed)
             //    hbaseConnection.Close();
 
+            // dispose or call CM ReleaseConnections if applicable
+            this._hbaseClient = null;
             this.Connected = false;
         }
 
