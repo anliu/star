@@ -366,7 +366,7 @@ namespace Microsoft.HBase.Client
                 this._bufferColumnInfo[col.Name] = new PipelineColumnInfo()
                 {
                     BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID),
-                    OutputColumnIndex = i
+                    InOutColumnIndex = i
                 };
             }
         }

@@ -3,9 +3,12 @@ using Microsoft.SqlServer.Dts.Pipeline;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
+using org.apache.hadoop.hbase.rest.protobuf.generated;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -20,6 +23,7 @@ namespace Microsoft.HBase.Client
     ]
     public class HBaseDest : PipelineComponent
     {
+        private Dictionary<string, PipelineColumnInfo> _bufferColumnInfo;
         private HBaseClient _hbaseClient;
         internal bool Connected { get; set; }
 
@@ -57,14 +61,21 @@ namespace Microsoft.HBase.Client
 
             IDTSInput100 input = ComponentMetaData.InputCollection.New();
             input.Name = "Input";
+            input.HasSideEffects = true;
+            input.ExternalMetadataColumnCollection.IsUsed = true;
+
+            // add error row disposition, default is to fail component.
+            input.ErrorRowDisposition = DTSRowDisposition.RD_FailComponent;
 
             // Get the assembly version and set that as our current version.
             SetComponentVersion();
 
-            ComponentMetaData.OutputCollection[0].ExternalMetadataColumnCollection.IsUsed = true;
-
             // Insert an error output.
-            AddErrorOutput("ErrorOutput", 0, 0);
+            var errorOutput = ComponentMetaData.OutputCollection.New();
+            errorOutput.Name = "ErrorOutput";
+            errorOutput.IsErrorOut = true;
+            errorOutput.SynchronousInputID = input.ID;
+            errorOutput.ExclusionGroup = 1;
 
             // Set we want to validate external metadata
             ComponentMetaData.ValidateExternalMetadata = true;
@@ -181,10 +192,109 @@ namespace Microsoft.HBase.Client
             throw new PipelineComponentHResultException(HResults.DTS_E_CANTDELETECOLUMN);
         }
 
+        public override IDTSInputColumn100 SetUsageType(int inputID, IDTSVirtualInput100 virtualInput, int lineageID, DTSUsageType usageType)
+        {
+            if (usageType == DTSUsageType.UT_READWRITE)
+            {
+                bool bCancel;
+                ErrorSupport.FireErrorWithArgs(
+                    HResults.DTS_E_CANTSETUSAGETYPETOREADWRITE,
+                    out bCancel, virtualInput.IdentificationString, lineageID);
+                throw new PipelineComponentHResultException(HResults.DTS_E_CANTSETUSAGETYPETOREADWRITE);
+            }
+            else
+            {
+                return base.SetUsageType(inputID, virtualInput, lineageID, usageType);
+            }
+        }
+
         public override void ReinitializeMetaData()
         {
             // baseclass may have some work to do here
             base.ReinitializeMetaData();
+
+            string columnTypesValue = string.Empty;
+
+            // which output is the error output?
+            int i, iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+
+            // get the output which is not the error output
+            var outputError = ComponentMetaData.OutputCollection[iErrorOutIndex];
+            var inputMain = ComponentMetaData.InputCollection[0];
+
+            // start fresh
+            inputMain.InputColumnCollection.RemoveAll();
+            inputMain.ExternalMetadataColumnCollection.RemoveAll();
+            for (i = outputError.OutputColumnCollection.Count - 1; i >= 0; i--)
+            {
+                // remove non special error columns, scan backward as item index
+                // can change after item removal
+                if (outputError.OutputColumnCollection[i].SpecialFlags == 0)
+                {
+                    outputError.OutputColumnCollection.RemoveObjectByIndex(i);
+                }
+            }
+
+            // try to read column types property
+            var propColumnTypes = ComponentMetaData.CustomPropertyCollection[Constants.PropColumnTypes];
+            if (propColumnTypes != null && propColumnTypes.Value != null &&
+                !string.IsNullOrEmpty(propColumnTypes.Value.ToString().Trim()))
+            {
+                columnTypesValue = propColumnTypes.Value.ToString();
+            }
+
+            var columnTypeList = columnTypesValue.Split('|');
+
+            // process columns property
+            var propColumns = ComponentMetaData.CustomPropertyCollection[Constants.PropColumns];
+            if (propColumns == null || propColumns.Value == null ||
+                string.IsNullOrEmpty(propColumns.Value.ToString().Trim()))
+            {
+                return;
+            }
+
+            var columnList = propColumns.Value.ToString().Split('|');
+            for (i = 0; i < columnList.Length; i++)
+            {
+                int Length = 0;
+                int Precision = 0;
+                int Scale = 0;
+                int CodePage = 0;
+
+                var columnQualifier = columnList[i];
+                var columnType = columnTypeList.Length > i ? columnTypeList[i] : "0";
+                int.TryParse(columnType, out Length);
+
+                var dtstype = Length != 0 ? DataType.DT_WSTR : DataType.DT_IMAGE;
+
+                var columnName = columnList[i];
+
+                // check the name
+                if (string.IsNullOrEmpty(columnName))
+                {
+                    bool bCancel;
+                    ErrorSupport.FireError(HResults.DTS_E_DATASOURCECOLUMNWITHNONAMEFOUND, out bCancel);
+                    throw new PipelineComponentHResultException(HResults.DTS_E_DATASOURCECOLUMNWITHNONAMEFOUND);
+                }
+
+                // create a new column
+                var outputcolNewError = outputError.OutputColumnCollection.NewAt(i);
+                var outputcolNewExternal = inputMain.ExternalMetadataColumnCollection.NewAt(i);
+
+                outputcolNewError.Name = columnName;
+                outputcolNewExternal.Name = columnName;
+
+                // set the external metadata column properties
+                outputcolNewExternal.DataType = dtstype;
+                outputcolNewExternal.Length = Length;
+                outputcolNewExternal.Precision = Precision;
+                outputcolNewExternal.Scale = Scale;
+                outputcolNewExternal.CodePage = CodePage;
+
+                // set the output column properties
+                outputcolNewError.SetDataTypeProperties(dtstype, Length, Precision, Scale, CodePage);
+            }
         }
 
         public override DTSValidationStatus Validate()
@@ -224,11 +334,154 @@ namespace Microsoft.HBase.Client
 
             if (this.Connected && ComponentMetaData.ValidateExternalMetadata == true)
             {
+                var input = ComponentMetaData.InputCollection[0];
+                var inputCols = input.InputColumnCollection;
+                var externCols = input.ExternalMetadataColumnCollection;
+
+                for (int i = 0; i < inputCols.Count; i++)
+                {
+                    var inputCol = inputCols[i];
+
+                    if (inputCol.DataType != DataType.DT_STR && inputCol.DataType != DataType.DT_WSTR)
+                    {
+                        bool bCancel;
+                        ErrorSupport.FireErrorWithArgs(
+                            HResults.DTS_E_INVALIDDATATYPE,
+                            out bCancel, inputCol.IdentificationString, inputCol.DataType);
+                        return DTSValidationStatus.VS_ISBROKEN;
+                    }
+
+                    try
+                    {
+                        // check the external meta data column is valid, which
+                        // with ensure the execute phase we have a valid column
+                        // qualifier for hbase
+                        externCols.FindObjectByID(inputCol.ExternalMetadataColumnID);
+                    }
+                    catch (COMException)
+                    {
+                        // There is no external metadata column for this input column.
+                        bool bCancel;
+                        ErrorSupport.FireErrorWithArgs(
+                            HResults.DTS_E_COLUMNMAPPEDTONONEXISTENTEXTERNALMETADATACOLUMN,
+                            out bCancel, inputCol.IdentificationString);
+                        return DTSValidationStatus.VS_ISBROKEN;
+                    }
+                }
+
+                if (inputCols.Count == 0 || externCols.Count == 0)
+                {
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(
+                        HResults.DTS_E_CANNOTHAVEZEROINPUTCOLUMNS,
+                                out bCancel, input.IdentificationString);
+                    return DTSValidationStatus.VS_ISBROKEN;
+                }
+
                 // validate table existence, columns are always available per
                 // hbase dynamic column model
+                try
+                {
+                    this._hbaseClient.GetTableInfo(propTableName.Value.ToString());
+                }
+                catch (WebException)
+                {
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(HResults.DTS_E_INCORRECTCUSTOMPROPERTYVALUEFOROBJECT,
+                        out bCancel, Constants.PropTableName, ComponentMetaData.IdentificationString);
+                    return DTSValidationStatus.VS_ISBROKEN;
+                }
             }
 
             return DTSValidationStatus.VS_ISVALID;
+        }
+
+        public override void PreExecute()
+        {
+            // baseclass may need to do some work
+            base.PreExecute();
+
+            // get error output
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputError = ComponentMetaData.OutputCollection[iErrorOutIndex];
+            var inputMain = ComponentMetaData.InputCollection[0];
+            var externCols = inputMain.ExternalMetadataColumnCollection;
+
+            if (!this.Connected)
+            {
+                bool bCancel;
+                ErrorSupport.FireError(HResults.DTS_E_CONNECTIONREQUIREDFORREAD, out bCancel);
+                throw new PipelineComponentHResultException(HResults.DTS_E_CONNECTIONREQUIREDFORREAD);
+            }
+
+            // in case outputMain is null, let it throw, just like an assertion
+            this._bufferColumnInfo = new Dictionary<string, PipelineColumnInfo>(inputMain.InputColumnCollection.Count);
+
+            // buffer layout is only fixed during PreExecute phase, keep a copy
+            // of the buffer column index so that we can set data in PrimeOutput
+            for (var i = 0; i < inputMain.InputColumnCollection.Count; i++)
+            {
+                var col = inputMain.InputColumnCollection[i];
+                var ext = externCols.GetObjectByID(col.ExternalMetadataColumnID);
+
+                this._bufferColumnInfo[ext.Name] = new PipelineColumnInfo()
+                {
+                    BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, col.LineageID),
+                    InOutColumnIndex = i
+                };
+            }
+        }
+
+        public override void ProcessInput(int inputID, PipelineBuffer buffer)
+        {
+            var input = ComponentMetaData.InputCollection[0];
+            var keyColumn = input.ExternalMetadataColumnCollection[0].Name;
+            var set = new CellSet();
+
+            while (buffer.NextRow())
+            {
+                var row = new CellSet.Row();
+
+                foreach (var col in this._bufferColumnInfo)
+                {
+                    if (col.Key == keyColumn)
+                    {
+                        if (buffer.IsNull(col.Value.BufferColumnIndex))
+                        {
+                            break;
+                        }
+                        row.key = Encoding.UTF8.GetBytes(buffer.GetString(col.Value.BufferColumnIndex));
+                    }
+                    else if (!buffer.IsNull(col.Value.BufferColumnIndex))
+                    {
+                        var value = new Cell
+                        {
+                            column = Encoding.UTF8.GetBytes(col.Key),
+                            data = Encoding.UTF8.GetBytes(buffer.GetString(col.Value.BufferColumnIndex))
+                        };
+
+                        row.values.Add(value);
+                    }
+                }
+
+                if (row.key != null && row.key.Length > 0)
+                {
+                    set.rows.Add(row);
+                }
+                else
+                {
+                    // throw error or redirect rows
+                }
+            }
+
+            if (set.rows.Count > 0)
+            {
+                // get table name
+                var propTableName = ComponentMetaData.CustomPropertyCollection[Constants.PropTableName];
+
+                this._hbaseClient.StoreCells(propTableName.Value.ToString(), set);
+            }
         }
 
         private void SetComponentVersion()

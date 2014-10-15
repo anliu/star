@@ -9,6 +9,6 @@ namespace Microsoft.HBase.Client.Common
     internal class PipelineColumnInfo
     {
         public int BufferColumnIndex;
-        public int OutputColumnIndex;
+        public int InOutColumnIndex;
     }
 }
