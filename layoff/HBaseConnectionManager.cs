@@ -71,7 +71,7 @@ namespace Microsoft.HBase.Client
             var creds = new ClusterCredentials(_uri, user, pwd);
             return new HBaseClient(creds)
             {
-                RestEndpointBase = this.RestBasePath
+                RestEndpointBase = string.IsNullOrEmpty(this.RestBasePath) ? null : this.RestBasePath
             };
         }
 

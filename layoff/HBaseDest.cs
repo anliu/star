@@ -384,6 +384,13 @@ namespace Microsoft.HBase.Client
                 {
                     this._hbaseClient.GetTableInfo(propTableName.Value.ToString());
                 }
+                catch (AggregateException)
+                {
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(HResults.DTS_E_INCORRECTCUSTOMPROPERTYVALUEFOROBJECT,
+                        out bCancel, Constants.PropTableName, ComponentMetaData.IdentificationString);
+                    return DTSValidationStatus.VS_ISBROKEN;
+                }
                 catch (WebException)
                 {
                     bool bCancel;

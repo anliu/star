@@ -325,6 +325,13 @@ namespace Microsoft.HBase.Client
                 {
                     this._hbaseClient.GetTableInfo(propTableName.Value.ToString());
                 }
+                catch(AggregateException)
+                {
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(HResults.DTS_E_INCORRECTCUSTOMPROPERTYVALUEFOROBJECT,
+                        out bCancel, Constants.PropTableName, ComponentMetaData.IdentificationString);
+                    return DTSValidationStatus.VS_ISBROKEN;
+                }
                 catch (WebException)
                 {
                     bool bCancel;
@@ -401,7 +408,7 @@ namespace Microsoft.HBase.Client
             // create scanner
             var scanSettings = new Scanner()
             {
-                batch = 10
+                batch = 1024
             };
 
             var scannerInfo = this._hbaseClient.CreateScanner(propTableName.Value.ToString(), scanSettings);
@@ -414,6 +421,10 @@ namespace Microsoft.HBase.Client
                     bufferMain.AddRow();
 
                     // copy row to the buffer
+                    if (this._bufferColumnInfo.ContainsKey(":key"))
+                    {
+                        SetBufferColumn(bufferMain, this._bufferColumnInfo[":key"].BufferColumnIndex, row.key);
+                    }
 
                     // mapping via column name, which is slow but there seems no
                     // better ways due to the dynamic column model of hbase which
@@ -432,37 +443,42 @@ namespace Microsoft.HBase.Client
                         }
 
                         var colIndex = this._bufferColumnInfo[colName].BufferColumnIndex;
-                        var colInfo = bufferMain.GetColumnInfo(colIndex);
-
-                        if (colInfo.DataType == DataType.DT_IMAGE)
-                        {
-                            // may need to convert from UTF8 to UTF16 if we use
-                            // DT_NTEXT which might double the memory footprint
-                            // so that we favor of DT_IMAGE for now, try json/xml
-                            // to see if it's already done in the client lib
-                            bufferMain.AddBlobData(colIndex, row.values[i].data);
-                        }
-                        else
-                        {
-                            // UTF8 seems working so far, use base64 for arbitrary data
-                            // if needed
-                            var stringValue = Encoding.UTF8.GetString(row.values[i].data);
-                            var subLength = colInfo.MaxLength;
-
-                            // todo handle redirection for truncation
-                            if (stringValue.Length < colInfo.MaxLength)
-                            {
-                                subLength = stringValue.Length;
-                            }
-
-                            bufferMain.SetString(colIndex, stringValue.Substring(0, subLength));
-                        }
+                        SetBufferColumn(bufferMain, colIndex, row.values[i].data);
                     }
                 }
             }
 
             // done
             bufferMain.SetEndOfRowset();
+        }
+
+        private void SetBufferColumn(PipelineBuffer buffer, int col, byte[] data)
+        {
+            var colInfo = buffer.GetColumnInfo(col);
+
+            if (colInfo.DataType == DataType.DT_IMAGE)
+            {
+                // may need to convert from UTF8 to UTF16 if we use
+                // DT_NTEXT which might double the memory footprint
+                // so that we favor of DT_IMAGE for now, try json/xml
+                // to see if it's already done in the client lib
+                buffer.AddBlobData(col, data);
+            }
+            else
+            {
+                // UTF8 seems working so far, use base64 for arbitrary data
+                // if needed
+                var stringValue = Encoding.UTF8.GetString(data);
+                var subLength = colInfo.MaxLength;
+
+                // todo handle redirection for truncation
+                if (stringValue.Length < colInfo.MaxLength)
+                {
+                    subLength = stringValue.Length;
+                }
+
+                buffer.SetString(col, stringValue.Substring(0, subLength));
+            }
         }
 
         private void SetComponentVersion()
