@@ -53,11 +53,17 @@ namespace Microsoft.HBase.Client
             propColumns.Description = "Columns to retrieve";
             propColumns.Value = string.Empty;
 
-            // Add the columns property.
+            // Add the type of columns property.
             var propColumnTypes = ComponentMetaData.CustomPropertyCollection.New();
             propColumnTypes.Name = Constants.PropColumnTypes;
             propColumnTypes.Description = "Type of columns to retrieve";
             propColumnTypes.Value = string.Empty;
+
+            // Add the batch size property.
+            var propBatchSize = ComponentMetaData.CustomPropertyCollection.New();
+            propBatchSize.Name = Constants.PropBatchSize;
+            propBatchSize.Description = "Batch size";
+            propBatchSize.Value = 1024;
 
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
             output.Name = "Output";
@@ -405,10 +411,13 @@ namespace Microsoft.HBase.Client
             // get table name
             var propTableName = ComponentMetaData.CustomPropertyCollection[Constants.PropTableName];
 
+            // get batch size
+            var propBatchSize = ComponentMetaData.CustomPropertyCollection[Constants.PropBatchSize];
+
             // create scanner
             var scanSettings = new Scanner()
             {
-                batch = 1024
+                batch = (int)propBatchSize.Value
             };
 
             var scannerInfo = this._hbaseClient.CreateScanner(propTableName.Value.ToString(), scanSettings);
@@ -423,7 +432,7 @@ namespace Microsoft.HBase.Client
                     // copy row to the buffer
                     if (this._bufferColumnInfo.ContainsKey(":key"))
                     {
-                        SetBufferColumn(bufferMain, this._bufferColumnInfo[":key"].BufferColumnIndex, row.key);
+                        SetBufferColumn(bufferMain, this._bufferColumnInfo[":key"], row.key);
                     }
 
                     // mapping via column name, which is slow but there seems no
@@ -442,8 +451,7 @@ namespace Microsoft.HBase.Client
                             continue;
                         }
 
-                        var colIndex = this._bufferColumnInfo[colName].BufferColumnIndex;
-                        SetBufferColumn(bufferMain, colIndex, row.values[i].data);
+                        SetBufferColumn(bufferMain, this._bufferColumnInfo[colName], row.values[i].data);
                     }
                 }
             }
@@ -452,8 +460,9 @@ namespace Microsoft.HBase.Client
             bufferMain.SetEndOfRowset();
         }
 
-        private void SetBufferColumn(PipelineBuffer buffer, int col, byte[] data)
+        private void SetBufferColumn(PipelineBuffer buffer, PipelineColumnInfo ci, byte[] data)
         {
+            var col = ci.BufferColumnIndex;
             var colInfo = buffer.GetColumnInfo(col);
 
             if (colInfo.DataType == DataType.DT_IMAGE)
@@ -475,9 +484,41 @@ namespace Microsoft.HBase.Client
                 if (stringValue.Length < colInfo.MaxLength)
                 {
                     subLength = stringValue.Length;
+                    HandleRowTruncation(buffer, ci);
                 }
 
                 buffer.SetString(col, stringValue.Substring(0, subLength));
+            }
+        }
+
+        private void HandleRowTruncation(PipelineBuffer buffer, PipelineColumnInfo ci)
+        {
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+
+            var output = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+            var outputError = ComponentMetaData.OutputCollection[iErrorOutIndex];
+
+            if (output.TruncationRowDisposition == DTSRowDisposition.RD_RedirectRow)
+            {
+                var outputCol = output.OutputColumnCollection[ci.InOutColumnIndex];
+
+                buffer.DirectErrorRow(iErrorOutID,
+                        HResults.DTS_E_TRUNCATIONTRIGGEREDREDIRECTION,
+                        outputCol.LineageID);
+            }
+            else if (output.ErrorRowDisposition == DTSRowDisposition.RD_FailComponent)
+            {
+                var outputCol = output.OutputColumnCollection[ci.InOutColumnIndex];
+
+                // throw error
+                bool bCancel;
+                ErrorSupport.FireErrorWithArgs(HResults.DTS_E_INDUCEDTRANSFORMFAILUREONTRUNCATION,
+                        out bCancel,
+                        ComponentMetaData.IdentificationString,
+                        outputCol.IdentificationString);
+
+                throw new PipelineComponentHResultException(HResults.DTS_E_INDUCEDTRANSFORMFAILUREONTRUNCATION);
             }
         }
 

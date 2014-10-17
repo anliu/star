@@ -59,6 +59,12 @@ namespace Microsoft.HBase.Client
             propColumnTypes.Description = "Type of columns to retrieve";
             propColumnTypes.Value = string.Empty;
 
+            // Add the batch size property.
+            var propBatchSize = ComponentMetaData.CustomPropertyCollection.New();
+            propBatchSize.Name = Constants.PropBatchSize;
+            propBatchSize.Description = "Batch size (in kilobyte)";
+            propBatchSize.Value = 1024;
+
             IDTSInput100 input = ComponentMetaData.InputCollection.New();
             input.Name = "Input";
             input.HasSideEffects = true;
@@ -354,7 +360,7 @@ namespace Microsoft.HBase.Client
                     try
                     {
                         // check the external meta data column is valid, which
-                        // with ensure the execute phase we have a valid column
+                        // will ensure the execute phase we have a valid column
                         // qualifier for hbase
                         externCols.FindObjectByID(inputCol.ExternalMetadataColumnID);
                     }
@@ -445,10 +451,22 @@ namespace Microsoft.HBase.Client
             var input = ComponentMetaData.InputCollection[0];
             var keyColumn = input.ExternalMetadataColumnCollection[0].Name;
             var set = new CellSet();
+            var currentSize = 0;
+            // get table name
+            var propTableName = ComponentMetaData.CustomPropertyCollection[Constants.PropTableName];
+
+            // get batch size
+            var propBatchSize = ComponentMetaData.CustomPropertyCollection[Constants.PropBatchSize];
+            var batchSize = 1024 * 1024;
+
+            if (propBatchSize != null && (int)propBatchSize.Value > 0){
+                batchSize = (int)propBatchSize.Value * 1024;
+            }
 
             while (buffer.NextRow())
             {
                 var row = new CellSet.Row();
+                var rowSize = 0;
 
                 foreach (var col in this._bufferColumnInfo)
                 {
@@ -458,7 +476,9 @@ namespace Microsoft.HBase.Client
                         {
                             break;
                         }
+
                         row.key = Encoding.UTF8.GetBytes(buffer.GetString(col.Value.BufferColumnIndex));
+                        rowSize += row.key.Length;
                     }
                     else if (!buffer.IsNull(col.Value.BufferColumnIndex))
                     {
@@ -469,24 +489,50 @@ namespace Microsoft.HBase.Client
                         };
 
                         row.values.Add(value);
+                        rowSize += (value.column.Length + value.data.Length);
                     }
                 }
 
                 if (row.key != null && row.key.Length > 0)
                 {
+                    // valid row, count the size
                     set.rows.Add(row);
+                    currentSize += rowSize;
                 }
-                else
+                else if (input.ErrorRowDisposition == DTSRowDisposition.RD_RedirectRow)
                 {
-                    // throw error or redirect rows
+                    // redirect rows
+                    var inputColIndex = this._bufferColumnInfo[keyColumn].InOutColumnIndex;
+
+                    buffer.DirectErrorRow(ComponentMetaData.OutputCollection[0].ID,
+                            HResults.DTS_E_NOKEYCOLS,
+                            input.InputColumnCollection[inputColIndex].LineageID);
+                }
+                else if (input.ErrorRowDisposition == DTSRowDisposition.RD_FailComponent)
+                {
+                    // throw error
+                    bool bCancel;
+                    ErrorSupport.FireErrorWithArgs(HResults.DTS_E_NOKEYCOLS,
+                            out bCancel,
+                            input.IdentificationString);
+
+                    throw new PipelineComponentHResultException(HResults.DTS_E_NOKEYCOLS);
+                }
+
+                if (currentSize > batchSize)
+                {
+                    // send the batch
+                    this._hbaseClient.StoreCells(propTableName.Value.ToString(), set);
+
+                    // reset
+                    currentSize = 0;
+                    set = new CellSet();
                 }
             }
 
+            // send in case there are any rows left
             if (set.rows.Count > 0)
             {
-                // get table name
-                var propTableName = ComponentMetaData.CustomPropertyCollection[Constants.PropTableName];
-
                 this._hbaseClient.StoreCells(propTableName.Value.ToString(), set);
             }
         }
