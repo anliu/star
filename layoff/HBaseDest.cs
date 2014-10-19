@@ -348,7 +348,11 @@ namespace Microsoft.HBase.Client
                 {
                     var inputCol = inputCols[i];
 
-                    if (inputCol.DataType != DataType.DT_STR && inputCol.DataType != DataType.DT_WSTR)
+                    // hbase doesn't have type system, convert to string type or
+                    // image before send to hbase dest
+                    if (inputCol.DataType != DataType.DT_STR &&
+                        inputCol.DataType != DataType.DT_WSTR &&
+                        inputCol.DataType != DataType.DT_IMAGE)
                     {
                         bool bCancel;
                         ErrorSupport.FireErrorWithArgs(
@@ -477,7 +481,7 @@ namespace Microsoft.HBase.Client
                             break;
                         }
 
-                        row.key = Encoding.UTF8.GetBytes(buffer.GetString(col.Value.BufferColumnIndex));
+                        row.key = GetBufferColumn(buffer, col.Value);
                         rowSize += row.key.Length;
                     }
                     else if (!buffer.IsNull(col.Value.BufferColumnIndex))
@@ -485,7 +489,7 @@ namespace Microsoft.HBase.Client
                         var value = new Cell
                         {
                             column = Encoding.UTF8.GetBytes(col.Key),
-                            data = Encoding.UTF8.GetBytes(buffer.GetString(col.Value.BufferColumnIndex))
+                            data = GetBufferColumn(buffer, col.Value)
                         };
 
                         row.values.Add(value);
@@ -535,6 +539,27 @@ namespace Microsoft.HBase.Client
             {
                 this._hbaseClient.StoreCells(propTableName.Value.ToString(), set);
             }
+        }
+
+        private byte[] GetBufferColumn(PipelineBuffer buffer, PipelineColumnInfo ci)
+        {
+            var col = ci.BufferColumnIndex;
+            var colInfo = buffer.GetColumnInfo(col);
+
+            if (colInfo.DataType == DataType.DT_IMAGE)
+            {
+                // may need to convert from UTF8 to UTF16 if we support DT_NTEXT
+                // which might double the memory footprint so that we favor of
+                // DT_IMAGE for now
+                return buffer.GetBlobData(col, 0, (int)buffer.GetBlobLength(col));
+            }
+            else if (colInfo.DataType == DataType.DT_STR || colInfo.DataType == DataType.DT_WSTR)
+            {
+                // use UTF8 for now, may need to expose an option later
+                return Encoding.UTF8.GetBytes(buffer.GetString(col));
+            }
+
+            return null;
         }
 
         private void SetComponentVersion()
