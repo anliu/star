@@ -29,9 +29,6 @@ namespace Microsoft.HBase.Client
 
         public override void ProvideComponentProperties()
         {
-            // Reset the component.
-            base.RemoveAllInputsOutputsAndCustomProperties();
-
             // start out clean, remove anything put on by the base class
             RemoveAllInputsOutputsAndCustomProperties();
 
