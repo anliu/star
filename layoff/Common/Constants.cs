@@ -12,5 +12,6 @@ namespace Microsoft.HBase.Client.Common
         public const string PropColumns = "Columns";
         public const string PropColumnTypes = "ColumnTypes";
         public const string PropBatchSize = "BatchSize";
+        public const string PropMapping = "Mapping";
     }
 }

@@ -1,4 +1,5 @@
-﻿using Microsoft.HBase.Client.Utilities;
+﻿using Microsoft.HBase.Client.Common;
+using Microsoft.HBase.Client.Utilities;
 using Microsoft.SqlServer.Dts.Pipeline;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
@@ -14,14 +15,15 @@ namespace Microsoft.HBase.Client
     [
         DtsPipelineComponent(ComponentType = ComponentType.Transform,
             CurrentVersion = 4,
-            DisplayName = "JSON Derived Columns Component",
+            DisplayName = "JSON Derived Columns",
             Description = "Derive columns from JSON objects",
-            RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE)
+            RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE,
+            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponents")
     ]
     public class TxJSONDerived : PipelineComponent
     {
-        private const string propMappingName = "Mapping";
-        private IEnumerable<string> mappingPaths;
+        private Dictionary<string, PipelineColumnInfo> mappingPaths;
+        private PipelineColumnInfo inputColInfo;
 
         public override void ProvideComponentProperties()
         {
@@ -31,9 +33,9 @@ namespace Microsoft.HBase.Client
             // error dispositions
             ComponentMetaData.UsesDispositions = true;
 
-            // Add the table name property.
+            // Add the mapping property.
             var propMapping = ComponentMetaData.CustomPropertyCollection.New();
-            propMapping.Name = propMappingName;
+            propMapping.Name = Constants.PropMapping;
             propMapping.Description = "Mapping (in json format)";
             propMapping.Value = string.Empty;
 
@@ -43,11 +45,10 @@ namespace Microsoft.HBase.Client
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
             output.Name = "Output";
             output.SynchronousInputID = input.ID;
+            output.ExternalMetadataColumnCollection.IsUsed = false;
 
             // Get the assembly version and set that as our current version.
             SetComponentVersion();
-
-            ComponentMetaData.OutputCollection[0].ExternalMetadataColumnCollection.IsUsed = true;
 
             // Insert an error output.
             var errorOutput = ComponentMetaData.OutputCollection.New();
@@ -57,15 +58,15 @@ namespace Microsoft.HBase.Client
             errorOutput.ExclusionGroup = 1;
         }
 
-        public override IDTSCustomProperty100 SetComponentProperty(string propertyName, object propertyValue)
-        {
-            if (propertyName == propMappingName)
-            {
-                this.mappingPaths = JsonParser.GetPropertyList((string)propertyValue);
-            }
+        //public override IDTSCustomProperty100 SetComponentProperty(string propertyName, object propertyValue)
+        //{
+        //    if (propertyName == propMappingName)
+        //    {
+        //        this.mappingPaths = JsonParser.GetPropertyList((string)propertyValue);
+        //    }
 
-            return base.SetComponentProperty(propertyName, propertyValue);
-        }
+        //    return base.SetComponentProperty(propertyName, propertyValue);
+        //}
 
         /// <summary>
         /// Disallow inserting an input by throwing an error.
@@ -148,10 +149,33 @@ namespace Microsoft.HBase.Client
             throw new PipelineComponentHResultException(HResults.DTS_E_CANTDELETECOLUMN);
         }
 
+        public override IDTSInputColumn100 SetUsageType(int inputID, IDTSVirtualInput100 virtualInput, int lineageID, DTSUsageType usageType)
+        {
+            if (usageType == DTSUsageType.UT_READWRITE)
+            {
+                bool bCancel;
+                ErrorSupport.FireErrorWithArgs(
+                    HResults.DTS_E_CANTSETUSAGETYPETOREADWRITE,
+                    out bCancel, virtualInput.IdentificationString, lineageID);
+                throw new PipelineComponentHResultException(HResults.DTS_E_CANTSETUSAGETYPETOREADWRITE);
+            }
+            else
+            {
+                return base.SetUsageType(inputID, virtualInput, lineageID, usageType);
+            }
+        }
+
         public override void ReinitializeMetaData()
         {
             // baseclass may have some work to do here
             base.ReinitializeMetaData();
+
+            var inputMain = ComponentMetaData.InputCollection[0];
+
+            // start fresh
+            inputMain.InputColumnCollection.RemoveAll();
+            var inputCol = inputMain.InputColumnCollection.New();
+            inputCol.Name = "JSON input";
         }
 
         public override DTSValidationStatus Validate()
@@ -182,6 +206,34 @@ namespace Microsoft.HBase.Client
         {
             // baseclass may need to do some work
             base.PreExecute();
+
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+
+            // in case outputMain is null, let it throw, just like an assertion
+            this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(outputMain.OutputColumnCollection.Count);
+
+            // buffer layout is only fixed during PreExecute phase, keep a copy
+            // of the buffer column index so that we can set data in PrimeOutput
+            for (var i = 0; i < outputMain.OutputColumnCollection.Count; i++)
+            {
+                var col = outputMain.OutputColumnCollection[i];
+
+                this.mappingPaths[col.Name] = new PipelineColumnInfo()
+                {
+                    BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID),
+                    InOutColumnIndex = i
+                };
+            }
+
+            // input should be only one column
+            var inputMain = ComponentMetaData.InputCollection[0];
+            this.inputColInfo = new PipelineColumnInfo
+            {
+                BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, inputMain.InputColumnCollection[0].LineageID),
+                InOutColumnIndex = 0
+            };
         }
 
         public override void ProcessInput(int inputID, PipelineBuffer buffer)
