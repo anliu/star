@@ -16,15 +16,15 @@ namespace Microsoft.HBase.Client
     [
         DtsPipelineComponent(ComponentType = ComponentType.Transform,
             CurrentVersion = 4,
-            DisplayName = "JSON Derived Columns",
-            Description = "Derive columns from JSON objects",
+            DisplayName = "Derived JSON",
+            Description = "Derive JSON objects from columns",
             RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE,
             UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponents")
     ]
-    public class TxJSONDerived : PipelineComponent
+    public class TxDerivedJSON : PipelineComponent
     {
         private Dictionary<string, PipelineColumnInfo> mappingPaths;
-        private PipelineColumnInfo inputColInfo;
+        private PipelineColumnInfo outputColInfo;
 
         public override void ProvideComponentProperties()
         {
@@ -41,10 +41,10 @@ namespace Microsoft.HBase.Client
             propMapping.Value = string.Empty;
 
             IDTSInput100 input = ComponentMetaData.InputCollection.New();
-            input.Name = "JSON input";
+            input.Name = "Input";
 
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
-            output.Name = "Output";
+            output.Name = "JSON output";
             output.SynchronousInputID = input.ID;
             output.ExternalMetadataColumnCollection.IsUsed = false;
 
@@ -171,12 +171,35 @@ namespace Microsoft.HBase.Client
             // baseclass may have some work to do here
             base.ReinitializeMetaData();
 
+            // which output is the error output?
+            int i, iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+
+            // get the output which is not the error output
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+            var outputError = ComponentMetaData.OutputCollection[iErrorOutIndex];
+
+            // start fresh
+            outputMain.OutputColumnCollection.RemoveAll();
+            var outputCol = outputMain.OutputColumnCollection.New();
+            outputCol.SetDataTypeProperties(DataType.DT_IMAGE, 0, 0, 0, 0);
+
+            for (i = outputError.OutputColumnCollection.Count - 1; i >= 0; i--)
+            {
+                // remove non special error columns, scan backward as item index
+                // can change after item removal
+                if (outputError.OutputColumnCollection[i].SpecialFlags == 0)
+                {
+                    outputError.OutputColumnCollection.RemoveObjectByIndex(i);
+                }
+            }
+
             var inputMain = ComponentMetaData.InputCollection[0];
 
             // start fresh
             inputMain.InputColumnCollection.RemoveAll();
             var inputCol = inputMain.InputColumnCollection.New();
-            inputCol.Name = "JSON input";
+            inputCol.Name = "Input";
         }
 
         public override DTSValidationStatus Validate()
@@ -187,15 +210,19 @@ namespace Microsoft.HBase.Client
                 return status;
             }
 
-            // should have one input, one column
-            if (ComponentMetaData.InputCollection.Count != 1 ||
-                ComponentMetaData.InputCollection[0].InputColumnCollection.Count != 1)
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+
+            // should have one output, one column (except error output)
+            if (ComponentMetaData.OutputCollection.Count > 2 ||
+                outputMain.OutputColumnCollection.Count != 1)
             {
                 return DTSValidationStatus.VS_ISCORRUPT;
             }
 
-            // should have two outputs
-            if (ComponentMetaData.OutputCollection.Count > 2)
+            // should have one inputs
+            if (ComponentMetaData.InputCollection.Count != 1)
             {
                 return DTSValidationStatus.VS_ISCORRUPT;
             }
@@ -211,28 +238,28 @@ namespace Microsoft.HBase.Client
             int iErrorOutID = 0, iErrorOutIndex = 0;
             GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
             var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+            var inputMain = ComponentMetaData.InputCollection[0];
 
             // in case outputMain is null, let it throw, just like an assertion
-            this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(outputMain.OutputColumnCollection.Count);
+            this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(inputMain.InputColumnCollection.Count);
 
             // buffer layout is only fixed during PreExecute phase, keep a copy
             // of the buffer column index so that we can set data in PrimeOutput
-            for (var i = 0; i < outputMain.OutputColumnCollection.Count; i++)
+            for (var i = 0; i < inputMain.InputColumnCollection.Count; i++)
             {
-                var col = outputMain.OutputColumnCollection[i];
+                var col = inputMain.InputColumnCollection[i];
 
                 this.mappingPaths[col.Name] = new PipelineColumnInfo()
                 {
-                    BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID),
+                    BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, col.LineageID),
                     InOutColumnIndex = i
                 };
             }
 
-            // input should be only one column
-            var inputMain = ComponentMetaData.InputCollection[0];
-            this.inputColInfo = new PipelineColumnInfo
+            // output should be only one column
+            this.outputColInfo = new PipelineColumnInfo
             {
-                BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, inputMain.InputColumnCollection[0].LineageID),
+                BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, outputMain.OutputColumnCollection[0].LineageID),
                 InOutColumnIndex = 0
             };
         }
@@ -241,36 +268,67 @@ namespace Microsoft.HBase.Client
         {
             while (buffer.NextRow())
             {
-                var col = this.inputColInfo.BufferColumnIndex;
-                var inputType = buffer.GetColumnInfo(col).DataType;
-                string inputValue = string.Empty;
-                if (inputType == DataType.DT_IMAGE)
-                {
-                    inputValue = Encoding.UTF8.GetString(buffer.GetBlobData(col, 0, (int)buffer.GetBlobLength(col)));
-                }
-                else if (inputType == DataType.DT_STR || inputType == DataType.DT_WSTR)
-                {
-                    inputValue = buffer.GetString(col);
-                }
+                var col = this.outputColInfo.BufferColumnIndex;
+                var outputType = buffer.GetColumnInfo(col).DataType;
+                var propMapping = ComponentMetaData.CustomPropertyCollection[Constants.PropMapping];
+                // build the output object structure so that it's easier to set
+                // values (it's much easier to SelectToken than CreateToken with
+                // path in JSON.net)
+                var obj = new JObject(propMapping.Value.ToString());
 
-                JObject obj = JObject.Parse(inputValue);
                 foreach (var mapping in this.mappingPaths)
                 {
+                    var inputType = buffer.GetColumnInfo(mapping.Value.BufferColumnIndex).DataType;
+                    string propValue = string.Empty;
+
                     var token = obj.SelectToken(mapping.Key, false);
                     if (token == null)
                     {
+                        // error out
                         continue;
                     }
 
-                    var outputType = buffer.GetColumnInfo(mapping.Value.BufferColumnIndex).DataType;
-                    if (outputType == DataType.DT_IMAGE)
+                    if (buffer.IsNull(mapping.Value.BufferColumnIndex))
                     {
-                        buffer.AddBlobData(mapping.Value.BufferColumnIndex, Encoding.UTF8.GetBytes(token.ToString()));
+                        // set null value as every object is created via mapping
+                        // json string, the value is preset to whatever value in
+                        // the mapping property value
+                        token.Replace(JValue.CreateNull());
+                        continue;
                     }
-                    else if (outputType == DataType.DT_STR || outputType == DataType.DT_WSTR)
+
+                    if (inputType == DataType.DT_STR || inputType == DataType.DT_WSTR)
                     {
-                        buffer.SetString(mapping.Value.BufferColumnIndex, token.ToString());
+                        propValue = buffer.GetString(mapping.Value.BufferColumnIndex);
                     }
+                    else if (inputType == DataType.DT_IMAGE)
+                    {
+                        var len = (int)buffer.GetBlobLength(mapping.Value.BufferColumnIndex);
+                        propValue = Encoding.UTF8.GetString(buffer.GetBlobData(mapping.Value.BufferColumnIndex, 0, len));
+                    }
+
+                    if (token.Type == JTokenType.String)
+                    {
+                        token.Replace(JValue.CreateString(propValue));
+                    }
+                    else if (token.Type == JTokenType.Object)
+                    {
+                        token.Replace(JObject.Parse(propValue));
+                    }
+                    else if (token.Type == JTokenType.Array)
+                    {
+                        token.Replace(JArray.Parse(propValue));
+                    }
+                    // todo handle other types
+                }
+
+                if (outputType == DataType.DT_IMAGE)
+                {
+                    buffer.AddBlobData(this.outputColInfo.BufferColumnIndex, Encoding.UTF8.GetBytes(obj.ToString()));
+                }
+                else if (outputType == DataType.DT_STR || outputType == DataType.DT_WSTR)
+                {
+                    buffer.SetString(this.outputColInfo.BufferColumnIndex, obj.ToString());
                 }
             }
         }

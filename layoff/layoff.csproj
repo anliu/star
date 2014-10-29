@@ -69,6 +69,7 @@
     <Compile Include="HBaseDest.cs" />
     <Compile Include="HBaseSrc.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="TxDerivedJSON.cs" />
     <Compile Include="TxJSONDerived.cs" />
     <Compile Include="Utilities\JsonParser.cs" />
   </ItemGroup>
