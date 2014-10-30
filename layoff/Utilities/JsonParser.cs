@@ -13,7 +13,7 @@ namespace Microsoft.HBase.Client.Utilities
         {
             var paths = new List<string>();
             var obj = JObject.Parse(json);
-            TraversObject(obj, (token) => {
+            TraverseObject(obj, (token) => {
                 if (token.Type == JTokenType.Property && token.First != null && token.First.Type == JTokenType.Object ||
                     token.Type == JTokenType.Object && token.HasValues)
                 {
@@ -27,7 +27,7 @@ namespace Microsoft.HBase.Client.Utilities
             return paths;
         }
 
-        private static void TraversObject(JToken obj, Action<JToken> tokenHandler)
+        private static void TraverseObject(JToken obj, Action<JToken> tokenHandler)
         {
             var cur = obj.First;
             tokenHandler(obj);
@@ -36,7 +36,7 @@ namespace Microsoft.HBase.Client.Utilities
                 tokenHandler(cur);
                 if (cur.First != null && cur.First.Type == JTokenType.Object)
                 {
-                    TraversObject(cur.First, tokenHandler);
+                    TraverseObject(cur.First, tokenHandler);
                 }
                 cur = cur.Next;
             }

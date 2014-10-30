@@ -4,16 +4,16 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{759CE2BB-EA9F-4AF7-8DE2-F020FA4CF1C5}</ProjectGuid>
+    <ProjectGuid>{664EBFCB-4BD5-43D8-877A-E8759FD90954}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Microsoft.HBase.Client</RootNamespace>
-    <AssemblyName>Microsoft.HBase.Client.DtsComponents</AssemblyName>
+    <RootNamespace>Microsoft.HBase.Client.DtsComponentUI</RootNamespace>
+    <AssemblyName>Microsoft.HBase.Client.DtsComponentUI</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SignAssembly>true</SignAssembly>
     <DelaySign>true</DelaySign>
-    <AssemblyOriginatorKeyFile>Keys\testkey.snk</AssemblyOriginatorKeyFile>
+    <AssemblyOriginatorKeyFile>..\Keys\testkey.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
     <DebugSymbols>true</DebugSymbols>
@@ -34,17 +34,13 @@
     <CodeAnalysisRuleSet>MinimumRecommendedRules.ruleset</CodeAnalysisRuleSet>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Microsoft.HBase.Client">
-      <HintPath>packages\Microsoft.HBase.Client.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
-      <HintPath>packages\Newtonsoft.Json.6.0.5\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <HintPath>..\packages\Newtonsoft.Json.6.0.5\lib\net45\Newtonsoft.Json.dll</HintPath>
     </Reference>
     <Reference Include="protobuf-net, Version=2.0.0.668, Culture=neutral, PublicKeyToken=257b51d87d2e4d67, processorArchitecture=MSIL">
       <Private>True</Private>
-      <HintPath>packages\protobuf-net.2.0.0.668\lib\net40\protobuf-net.dll</HintPath>
+      <HintPath>..\packages\protobuf-net.2.0.0.668\lib\net40\protobuf-net.dll</HintPath>
     </Reference>
     <Reference Include="System" />
     <Reference Include="System.Core" />
@@ -63,18 +59,26 @@
     <Reference Include="Microsoft.SqlServer.DTSPipelineWrap, Version=11.0.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Common\Constants.cs" />
-    <Compile Include="Common\PipelineColumnInfo.cs" />
-    <Compile Include="HBaseConnectionManager.cs" />
-    <Compile Include="HBaseDest.cs" />
-    <Compile Include="HBaseSrc.cs" />
+    <Compile Include="..\Common\Constants.cs">
+      <Link>Common\Constants.cs</Link>
+    </Compile>
+    <Compile Include="..\Common\PipelineColumnInfo.cs">
+      <Link>Common\PipelineColumnInfo.cs</Link>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="TxJSONDerived.cs" />
-    <Compile Include="Utilities\JsonParser.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="Keys\testkey.snk" />
-    <None Include="packages.config" />
+    <Compile Include="TxJSONDerivedForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="TxJSONDerivedForm.Designer.cs">
+      <DependentUpon>TxJSONDerivedForm.cs</DependentUpon>
+    </Compile>
+    <Compile Include="TxJSONDerivedUI.cs" />
+    <Compile Include="..\Utilities\JsonParser.cs">
+      <Link>Utilities\JsonParser.cs</Link>
+    </Compile>
+    <EmbeddedResource Include="TxJSONDerivedForm.resx">
+      <DependentUpon>TxJSONDerivedForm.cs</DependentUpon>
+    </EmbeddedResource>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
