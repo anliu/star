@@ -283,17 +283,17 @@ namespace Microsoft.HBase.Client
 
                 // create a new column
                 var outputcolNewError = outputError.OutputColumnCollection.NewAt(i);
-                var outputcolNewExternal = inputMain.ExternalMetadataColumnCollection.NewAt(i);
+                var inputcolNewExternal = inputMain.ExternalMetadataColumnCollection.NewAt(i);
 
                 outputcolNewError.Name = columnName;
-                outputcolNewExternal.Name = columnName;
+                inputcolNewExternal.Name = columnName;
 
                 // set the external metadata column properties
-                outputcolNewExternal.DataType = dtstype;
-                outputcolNewExternal.Length = Length;
-                outputcolNewExternal.Precision = Precision;
-                outputcolNewExternal.Scale = Scale;
-                outputcolNewExternal.CodePage = CodePage;
+                inputcolNewExternal.DataType = dtstype;
+                inputcolNewExternal.Length = Length;
+                inputcolNewExternal.Precision = Precision;
+                inputcolNewExternal.Scale = Scale;
+                inputcolNewExternal.CodePage = CodePage;
 
                 // set the output column properties
                 outputcolNewError.SetDataTypeProperties(dtstype, Length, Precision, Scale, CodePage);

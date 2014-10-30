@@ -42,11 +42,16 @@ namespace Microsoft.HBase.Client
 
             IDTSInput100 input = ComponentMetaData.InputCollection.New();
             input.Name = "Input";
+            input.ExternalMetadataColumnCollection.IsUsed = true;
 
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
             output.Name = "JSON output";
             output.SynchronousInputID = input.ID;
             output.ExternalMetadataColumnCollection.IsUsed = false;
+
+            var outputCol = output.OutputColumnCollection.New();
+            outputCol.Name = "JSON";
+            outputCol.SetDataTypeProperties(DataType.DT_IMAGE, 0, 0, 0, 0);
 
             // Get the assembly version and set that as our current version.
             SetComponentVersion();
@@ -182,6 +187,7 @@ namespace Microsoft.HBase.Client
             // start fresh
             outputMain.OutputColumnCollection.RemoveAll();
             var outputCol = outputMain.OutputColumnCollection.New();
+            outputCol.Name = "JSON";
             outputCol.SetDataTypeProperties(DataType.DT_IMAGE, 0, 0, 0, 0);
 
             for (i = outputError.OutputColumnCollection.Count - 1; i >= 0; i--)
@@ -198,8 +204,23 @@ namespace Microsoft.HBase.Client
 
             // start fresh
             inputMain.InputColumnCollection.RemoveAll();
-            var inputCol = inputMain.InputColumnCollection.New();
-            inputCol.Name = "Input";
+            inputMain.ExternalMetadataColumnCollection.RemoveAll();
+
+            var propMapping = ComponentMetaData.CustomPropertyCollection[Constants.PropMapping];
+            if (!string.IsNullOrEmpty((string)propMapping.Value))
+            {
+                i = 0;
+                foreach (var prop in JsonParser.GetPropertyList(propMapping.Value.ToString()))
+                {
+                    var externCol = inputMain.ExternalMetadataColumnCollection.NewAt(i++);
+                    externCol.Name = prop;
+                    externCol.DataType = DataType.DT_WSTR;
+                    externCol.Length = 50;
+                    externCol.Precision = 0;
+                    externCol.Scale = 0;
+                    externCol.CodePage = 0;
+                }
+            }
         }
 
         public override DTSValidationStatus Validate()
@@ -239,6 +260,7 @@ namespace Microsoft.HBase.Client
             GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
             var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
             var inputMain = ComponentMetaData.InputCollection[0];
+            var externCols = inputMain.ExternalMetadataColumnCollection;
 
             // in case outputMain is null, let it throw, just like an assertion
             this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(inputMain.InputColumnCollection.Count);
@@ -248,8 +270,9 @@ namespace Microsoft.HBase.Client
             for (var i = 0; i < inputMain.InputColumnCollection.Count; i++)
             {
                 var col = inputMain.InputColumnCollection[i];
+                var ext = externCols.GetObjectByID(col.ExternalMetadataColumnID);
 
-                this.mappingPaths[col.Name] = new PipelineColumnInfo()
+                this.mappingPaths[ext.Name] = new PipelineColumnInfo()
                 {
                     BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, col.LineageID),
                     InOutColumnIndex = i
@@ -259,7 +282,7 @@ namespace Microsoft.HBase.Client
             // output should be only one column
             this.outputColInfo = new PipelineColumnInfo
             {
-                BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, outputMain.OutputColumnCollection[0].LineageID),
+                BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, outputMain.OutputColumnCollection[0].LineageID),
                 InOutColumnIndex = 0
             };
         }
@@ -274,7 +297,7 @@ namespace Microsoft.HBase.Client
                 // build the output object structure so that it's easier to set
                 // values (it's much easier to SelectToken than CreateToken with
                 // path in JSON.net)
-                var obj = new JObject(propMapping.Value.ToString());
+                var obj = JObject.Parse(propMapping.Value.ToString());
 
                 foreach (var mapping in this.mappingPaths)
                 {
@@ -319,7 +342,7 @@ namespace Microsoft.HBase.Client
                     {
                         token.Replace(JArray.Parse(propValue));
                     }
-                    // todo handle other types
+                    // todo check column type instead nad handle other types
                 }
 
                 if (outputType == DataType.DT_IMAGE)
