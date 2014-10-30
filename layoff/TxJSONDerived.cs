@@ -19,7 +19,7 @@ namespace Microsoft.HBase.Client
             DisplayName = "JSON Derived Columns",
             Description = "Derive columns from JSON objects",
             RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE,
-            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponents")
+            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponentUI")
     ]
     public class TxJSONDerived : PipelineComponent
     {
@@ -171,12 +171,28 @@ namespace Microsoft.HBase.Client
             // baseclass may have some work to do here
             base.ReinitializeMetaData();
 
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
             var inputMain = ComponentMetaData.InputCollection[0];
 
             // start fresh
             inputMain.InputColumnCollection.RemoveAll();
-            var inputCol = inputMain.InputColumnCollection.New();
-            inputCol.Name = "JSON input";
+
+            var propMapping = ComponentMetaData.CustomPropertyCollection[Constants.PropMapping];
+            if (propMapping != null && !string.IsNullOrEmpty((string)propMapping.Value))
+            {
+                int i = 0;
+                // clear the current output columns
+                outputMain.OutputColumnCollection.RemoveAll();
+
+                foreach (var prop in JsonParser.GetPropertyList((string)propMapping.Value))
+                {
+                    var outputCol = outputMain.OutputColumnCollection.NewAt(i++);
+                    outputCol.Name = prop;
+                    outputCol.SetDataTypeProperties(DataType.DT_WSTR, 50, 0, 0, 0);
+                }
+            }
         }
 
         public override DTSValidationStatus Validate()
@@ -211,25 +227,27 @@ namespace Microsoft.HBase.Client
             int iErrorOutID = 0, iErrorOutIndex = 0;
             GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
             var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+            // input should be only one column
+            var inputMain = ComponentMetaData.InputCollection[0];
 
             // in case outputMain is null, let it throw, just like an assertion
             this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(outputMain.OutputColumnCollection.Count);
 
             // buffer layout is only fixed during PreExecute phase, keep a copy
-            // of the buffer column index so that we can set data in PrimeOutput
+            // of the buffer column index
+            // it's a synchronous transform so that always look up via the input
+            // buffer
             for (var i = 0; i < outputMain.OutputColumnCollection.Count; i++)
             {
                 var col = outputMain.OutputColumnCollection[i];
 
                 this.mappingPaths[col.Name] = new PipelineColumnInfo()
                 {
-                    BufferColumnIndex = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID),
+                    BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, col.LineageID),
                     InOutColumnIndex = i
                 };
             }
 
-            // input should be only one column
-            var inputMain = ComponentMetaData.InputCollection[0];
             this.inputColInfo = new PipelineColumnInfo
             {
                 BufferColumnIndex = BufferManager.FindColumnByLineageID(inputMain.Buffer, inputMain.InputColumnCollection[0].LineageID),

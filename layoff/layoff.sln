@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 2012
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "layoff", "layoff.csproj", "{759CE2BB-EA9F-4AF7-8DE2-F020FA4CF1C5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "layoffUI", "UI\layoffUI.csproj", "{664EBFCB-4BD5-43D8-877A-E8759FD90954}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,14 @@ Global
 		{759CE2BB-EA9F-4AF7-8DE2-F020FA4CF1C5}.Release|Any CPU.Build.0 = Release|Any CPU
 		{759CE2BB-EA9F-4AF7-8DE2-F020FA4CF1C5}.Release|x64.ActiveCfg = Release|Any CPU
 		{759CE2BB-EA9F-4AF7-8DE2-F020FA4CF1C5}.Release|x86.ActiveCfg = Release|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Release|Any CPU.Build.0 = Release|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Release|x64.ActiveCfg = Release|Any CPU
+		{664EBFCB-4BD5-43D8-877A-E8759FD90954}.Release|x86.ActiveCfg = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

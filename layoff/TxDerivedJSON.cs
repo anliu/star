@@ -19,7 +19,7 @@ namespace Microsoft.HBase.Client
             DisplayName = "Derived JSON",
             Description = "Derive JSON objects from columns",
             RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE,
-            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponents")
+            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponentUI")
     ]
     public class TxDerivedJSON : PipelineComponent
     {
@@ -266,7 +266,9 @@ namespace Microsoft.HBase.Client
             this.mappingPaths = new Dictionary<string, PipelineColumnInfo>(inputMain.InputColumnCollection.Count);
 
             // buffer layout is only fixed during PreExecute phase, keep a copy
-            // of the buffer column index so that we can set data in PrimeOutput
+            // of the buffer column index
+            // it's a synchronous transform so that always look up via the input
+            // buffer
             for (var i = 0; i < inputMain.InputColumnCollection.Count; i++)
             {
                 var col = inputMain.InputColumnCollection[i];

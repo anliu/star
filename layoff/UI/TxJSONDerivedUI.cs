@@ -6,7 +6,7 @@ using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 
 namespace Microsoft.HBase.Client.UI
 {
-    class TxJSONDerivedUI : IDtsComponentUI
+    public class TxJSONDerivedUI : IDtsComponentUI
     {
         IDTSComponentMetaData100 md;
         IServiceProvider sp;

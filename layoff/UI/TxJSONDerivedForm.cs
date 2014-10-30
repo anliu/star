@@ -2,7 +2,7 @@
 using Microsoft.HBase.Client.Utilities;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
-//using Microsoft.SqlServer.Dts.Runtime.Wrapper;
+using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -68,7 +68,7 @@ namespace Microsoft.HBase.Client.UI
                         outputMain.OutputColumnCollection.RemoveAll();
                         var outputCol = outputMain.OutputColumnCollection.NewAt(i++);
                         outputCol.Name = prop;
-                        outputCol.SetDataTypeProperties(SqlServer.Dts.Runtime.Wrapper.DataType.DT_WSTR, 50, 0, 0, 0);
+                        outputCol.SetDataTypeProperties(DataType.DT_WSTR, 50, 0, 0, 0);
                     }
                     else if (typeName.IndexOf("TxDerivedJSON") >= 0)
                     {
@@ -78,7 +78,7 @@ namespace Microsoft.HBase.Client.UI
                         inputMain.ExternalMetadataColumnCollection.RemoveAll();
                         var externCol = inputMain.ExternalMetadataColumnCollection.NewAt(i++);
                         externCol.Name = prop;
-                        //externCol.DataType = DataType.DT_WSTR;
+                        externCol.DataType = DataType.DT_WSTR;
                         externCol.Length = 50;
                         externCol.Precision = 0;
                         externCol.Scale = 0;
