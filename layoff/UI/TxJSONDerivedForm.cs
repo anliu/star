@@ -49,7 +49,7 @@ namespace Microsoft.HBase.Client.UI
             try
             {
                 var propList = JsonParser.GetPropertyList(this.tbMapping.Text);
-                int i = 0;
+                bool derivedJson = false, jsonDerived = false;
 
                 // input is valid, set the property
                 var propMapping = md.CustomPropertyCollection[Constants.PropMapping];
@@ -58,24 +58,36 @@ namespace Microsoft.HBase.Client.UI
                     propMapping.Value = this.tbMapping.Text;
                 }
 
+                var typeName = (typeNameProp.Value ?? string.Empty).ToString();
+                if (typeName.IndexOf("TxJSONDerived") >= 0)
+                {
+                    // clear the current output columns
+                    var outputMain = md.OutputCollection[0].IsErrorOut ? md.OutputCollection[1] : md.OutputCollection[0];
+                    outputMain.OutputColumnCollection.RemoveAll();
+                    jsonDerived = true;
+                }
+                else if (typeName.IndexOf("TxDerivedJSON") >= 0)
+                {
+                    var inputMain = md.InputCollection[0];
+                    // clear the current input columns
+                    // inputMain.InputColumnCollection.RemoveAll();
+                    inputMain.ExternalMetadataColumnCollection.RemoveAll();
+                    derivedJson = true;
+                }
+
+                int i = 0;
                 foreach (var prop in propList)
                 {
-                    var typeName = (typeNameProp.Value ?? string.Empty).ToString();
-                    if (typeName.IndexOf("TxJSONDerived") >= 0)
+                    if (jsonDerived)
                     {
                         var outputMain = md.OutputCollection[0].IsErrorOut ? md.OutputCollection[1] : md.OutputCollection[0];
-                        // clear the current output columns
-                        outputMain.OutputColumnCollection.RemoveAll();
                         var outputCol = outputMain.OutputColumnCollection.NewAt(i++);
                         outputCol.Name = prop;
                         outputCol.SetDataTypeProperties(DataType.DT_WSTR, 50, 0, 0, 0);
                     }
-                    else if (typeName.IndexOf("TxDerivedJSON") >= 0)
+                    else if (derivedJson)
                     {
                         var inputMain = md.InputCollection[0];
-                        // clear the current input columns
-                        // inputMain.InputColumnCollection.RemoveAll();
-                        inputMain.ExternalMetadataColumnCollection.RemoveAll();
                         var externCol = inputMain.ExternalMetadataColumnCollection.NewAt(i++);
                         externCol.Name = prop;
                         externCol.DataType = DataType.DT_WSTR;
