@@ -35,6 +35,7 @@
             // 
             // tbMapping
             // 
+            this.tbMapping.Font = new System.Drawing.Font("Consolas", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.tbMapping.Location = new System.Drawing.Point(12, 30);
             this.tbMapping.Multiline = true;
             this.tbMapping.Name = "tbMapping";
@@ -76,7 +77,6 @@
             this.Name = "TxJSONDerivedForm";
             this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "TxJSONDerivedForm";
             this.ResumeLayout(false);
             this.PerformLayout();
 

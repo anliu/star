@@ -28,6 +28,8 @@ namespace Microsoft.HBase.Client.UI
             // Create and display the form for the user interface.
             var componentEditor = new TxJSONDerivedForm(cons, vars, md);
 
+            componentEditor.Text = md.IdentificationString;
+
             DialogResult result = componentEditor.ShowDialog(parentWindow);
 
             if (result == DialogResult.OK)

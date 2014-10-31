@@ -50,6 +50,8 @@ namespace Microsoft.HBase.Client.UI
             {
                 var propList = JsonParser.GetPropertyList(this.tbMapping.Text);
                 bool derivedJson = false, jsonDerived = false;
+                var mapping = new Dictionary<string, int>();
+                int i;
 
                 // input is valid, set the property
                 var propMapping = md.CustomPropertyCollection[Constants.PropMapping];
@@ -71,11 +73,17 @@ namespace Microsoft.HBase.Client.UI
                     var inputMain = md.InputCollection[0];
                     // clear the current input columns
                     // inputMain.InputColumnCollection.RemoveAll();
+                    for (i = 0; i < inputMain.InputColumnCollection.Count; i++)
+                    {
+                        var externCol = inputMain.ExternalMetadataColumnCollection.FindObjectByID(inputMain.InputColumnCollection[i].ExternalMetadataColumnID);
+                        mapping[externCol.Name] = inputMain.InputColumnCollection[i].ID;
+                    }
+
                     inputMain.ExternalMetadataColumnCollection.RemoveAll();
                     derivedJson = true;
                 }
 
-                int i = 0;
+                i = 0;
                 foreach (var prop in propList)
                 {
                     if (jsonDerived)
@@ -95,6 +103,12 @@ namespace Microsoft.HBase.Client.UI
                         externCol.Precision = 0;
                         externCol.Scale = 0;
                         externCol.CodePage = 0;
+
+                        // preserve the input mapping if possible
+                        if (mapping.ContainsKey(prop))
+                        {
+                            inputMain.InputColumnCollection.FindObjectByID(mapping[prop]).ExternalMetadataColumnID = externCol.ID;
+                        }
                     }
                     else
                     {
