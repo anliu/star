@@ -38,13 +38,13 @@
             this.tbMapping.Location = new System.Drawing.Point(12, 30);
             this.tbMapping.Multiline = true;
             this.tbMapping.Name = "tbMapping";
-            this.tbMapping.Size = new System.Drawing.Size(350, 376);
+            this.tbMapping.Size = new System.Drawing.Size(549, 376);
             this.tbMapping.TabIndex = 0;
             // 
             // btOK
             // 
             this.btOK.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.btOK.Location = new System.Drawing.Point(478, 441);
+            this.btOK.Location = new System.Drawing.Point(289, 441);
             this.btOK.Name = "btOK";
             this.btOK.Size = new System.Drawing.Size(105, 23);
             this.btOK.TabIndex = 1;
@@ -55,7 +55,7 @@
             // btCancel
             // 
             this.btCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.btCancel.Location = new System.Drawing.Point(608, 441);
+            this.btCancel.Location = new System.Drawing.Point(425, 441);
             this.btCancel.Name = "btCancel";
             this.btCancel.Size = new System.Drawing.Size(105, 23);
             this.btCancel.TabIndex = 2;
@@ -64,11 +64,10 @@
             // 
             // TxJSONDerivedForm
             // 
-            this.AcceptButton = this.btOK;
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.CancelButton = this.btCancel;
-            this.ClientSize = new System.Drawing.Size(751, 476);
+            this.ClientSize = new System.Drawing.Size(575, 481);
             this.Controls.Add(this.btCancel);
             this.Controls.Add(this.btOK);
             this.Controls.Add(this.tbMapping);

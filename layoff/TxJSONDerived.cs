@@ -166,6 +166,19 @@ namespace Microsoft.HBase.Client
             }
         }
 
+        public override void SetOutputColumnDataTypeProperties(int iOutputID, int iOutputColumnID, DataType eDataType, int iLength, int iPrecision, int iScale, int iCodePage)
+        {
+            if (eDataType != DataType.DT_WSTR && eDataType != DataType.DT_STR &&
+                eDataType != DataType.DT_IMAGE && eDataType != DataType.DT_NTEXT && eDataType != DataType.DT_TEXT)
+            {
+                throw new PipelineComponentHResultException(HResults.DTS_E_UNEXPECTEDCOLUMNDATATYPE);
+            }
+
+            var output = ComponentMetaData.OutputCollection.FindObjectByID(iOutputID);
+            var col = output.OutputColumnCollection.FindObjectByID(iOutputColumnID);
+            col.SetDataTypeProperties(eDataType, iLength, iPrecision, iScale, iCodePage);
+        }
+
         public override void ReinitializeMetaData()
         {
             // baseclass may have some work to do here
@@ -214,6 +227,30 @@ namespace Microsoft.HBase.Client
             if (ComponentMetaData.OutputCollection.Count > 2)
             {
                 return DTSValidationStatus.VS_ISCORRUPT;
+            }
+
+            var inputMain = ComponentMetaData.InputCollection[0];
+            var eDataType = inputMain.InputColumnCollection[0].DataType;
+
+            if (eDataType != DataType.DT_WSTR && eDataType != DataType.DT_STR &&
+                eDataType != DataType.DT_IMAGE && eDataType != DataType.DT_NTEXT && eDataType != DataType.DT_TEXT)
+            {
+                throw new PipelineComponentHResultException(HResults.DTS_E_UNEXPECTEDCOLUMNDATATYPE);
+            }
+
+            int iErrorOutID = 0, iErrorOutIndex = 0;
+            GetErrorOutputInfo(ref iErrorOutID, ref iErrorOutIndex);
+            var outputMain = ComponentMetaData.OutputCollection[iErrorOutIndex == 0 ? 1 : 0];
+
+            for (var i = 0; i < outputMain.OutputColumnCollection.Count; i++)
+            {
+                var col = outputMain.OutputColumnCollection[i];
+                eDataType = col.DataType;
+                if (eDataType != DataType.DT_WSTR && eDataType != DataType.DT_STR &&
+                    eDataType != DataType.DT_IMAGE && eDataType != DataType.DT_NTEXT && eDataType != DataType.DT_TEXT)
+                {
+                    throw new PipelineComponentHResultException(HResults.DTS_E_UNEXPECTEDCOLUMNDATATYPE);
+                }
             }
 
             return DTSValidationStatus.VS_ISVALID;
@@ -266,7 +303,8 @@ namespace Microsoft.HBase.Client
                 {
                     inputValue = Encoding.UTF8.GetString(buffer.GetBlobData(col, 0, (int)buffer.GetBlobLength(col)));
                 }
-                else if (inputType == DataType.DT_STR || inputType == DataType.DT_WSTR)
+                else if (inputType == DataType.DT_STR || inputType == DataType.DT_WSTR ||
+                    inputType == DataType.DT_TEXT || inputType == DataType.DT_NTEXT)
                 {
                     inputValue = buffer.GetString(col);
                 }
@@ -285,7 +323,8 @@ namespace Microsoft.HBase.Client
                     {
                         buffer.AddBlobData(mapping.Value.BufferColumnIndex, Encoding.UTF8.GetBytes(token.ToString()));
                     }
-                    else if (outputType == DataType.DT_STR || outputType == DataType.DT_WSTR)
+                    else if (outputType == DataType.DT_STR || outputType == DataType.DT_WSTR ||
+                        outputType == DataType.DT_TEXT || outputType == DataType.DT_NTEXT)
                     {
                         buffer.SetString(mapping.Value.BufferColumnIndex, token.ToString());
                     }
