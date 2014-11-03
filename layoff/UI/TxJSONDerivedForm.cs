@@ -1,20 +1,14 @@
-﻿using Microsoft.HBase.Client.Common;
-using Microsoft.HBase.Client.Utilities;
-using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
+﻿using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using Newtonsoft.Json;
+using Star.Layoff.DtsComponents.Common;
+using Star.Layoff.DtsComponents.Utilities;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
-namespace Microsoft.HBase.Client.UI
+namespace Star.Layoff.DtsComponents.UI
 {
     public partial class TxJSONDerivedForm : Form
     {

@@ -7,8 +7,8 @@
     <ProjectGuid>{664EBFCB-4BD5-43D8-877A-E8759FD90954}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Microsoft.HBase.Client.DtsComponentUI</RootNamespace>
-    <AssemblyName>Microsoft.HBase.Client.DtsComponentUI</AssemblyName>
+    <RootNamespace>Star.Layoff.DtsComponents.DtsComponentUI</RootNamespace>
+    <AssemblyName>Star.Layoff.DtsComponents.DtsComponentUI</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <SignAssembly>true</SignAssembly>

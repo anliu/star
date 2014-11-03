@@ -1,4 +1,4 @@
-﻿namespace Microsoft.HBase.Client.UI
+﻿namespace Star.Layoff.DtsComponents.UI
 {
     partial class TxJSONDerivedForm
     {

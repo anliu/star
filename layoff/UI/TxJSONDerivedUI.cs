@@ -4,7 +4,7 @@ using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Pipeline.Design;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 
-namespace Microsoft.HBase.Client.UI
+namespace Star.Layoff.DtsComponents.UI
 {
     public class TxJSONDerivedUI : IDtsComponentUI
     {

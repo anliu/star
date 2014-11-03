@@ -1,11 +1,12 @@
-﻿using Microsoft.SqlServer.Dts.Runtime;
+﻿using Microsoft.HBase.Client;
+using Microsoft.SqlServer.Dts.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Microsoft.HBase.Client
+namespace Star.Layoff.DtsComponents
 {
     [
         DtsConnection(ConnectionType = "HBase",

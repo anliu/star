@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Microsoft.HBase.Client.Utilities
+namespace Star.Layoff.DtsComponents.Utilities
 {
     internal class JsonParser
     {

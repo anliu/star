@@ -1,17 +1,15 @@
-﻿using Microsoft.HBase.Client.Common;
-using Microsoft.HBase.Client.Utilities;
-using Microsoft.SqlServer.Dts.Pipeline;
+﻿using Microsoft.SqlServer.Dts.Pipeline;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using Newtonsoft.Json.Linq;
+using Star.Layoff.DtsComponents.Common;
+using Star.Layoff.DtsComponents.Utilities;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace Microsoft.HBase.Client
+namespace Star.Layoff.DtsComponents
 {
     [
         DtsPipelineComponent(ComponentType = ComponentType.Transform,
@@ -19,7 +17,7 @@ namespace Microsoft.HBase.Client
             DisplayName = "JSON Derived Columns",
             Description = "Derive columns from JSON objects",
             RequiredProductLevel = Microsoft.SqlServer.Dts.Runtime.Wrapper.DTSProductLevel.DTSPL_NONE,
-            UITypeName = "Microsoft.HBase.Client.UI.TxJSONDerivedUI, Microsoft.HBase.Client.DtsComponentUI")
+            UITypeName = "Star.Layoff.DtsComponents.UI.TxJSONDerivedUI, Star.Layoff.DtsComponents.DtsComponentUI")
     ]
     public class TxJSONDerived : PipelineComponent
     {

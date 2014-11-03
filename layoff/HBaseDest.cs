@@ -1,18 +1,17 @@
-﻿using Microsoft.HBase.Client.Common;
+﻿using Microsoft.HBase.Client;
 using Microsoft.SqlServer.Dts.Pipeline;
 using Microsoft.SqlServer.Dts.Pipeline.Wrapper;
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using org.apache.hadoop.hbase.rest.protobuf.generated;
+using Star.Layoff.DtsComponents.Common;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading.Tasks;
 
-namespace Microsoft.HBase.Client
+namespace Star.Layoff.DtsComponents
 {
     [
         DtsPipelineComponent(ComponentType = ComponentType.DestinationAdapter,
