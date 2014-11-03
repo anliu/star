@@ -2,6 +2,7 @@
 using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Star.Layoff.DtsComponents.Common;
 using Star.Layoff.DtsComponents.Utilities;
 using System;
@@ -22,7 +23,14 @@ namespace Star.Layoff.DtsComponents.UI
             var propMapping = md.CustomPropertyCollection[Constants.PropMapping];
             if (propMapping != null)
             {
-                this.tbMapping.Text = (string)propMapping.Value;
+                try
+                {
+                    this.tbMapping.Text = JObject.Parse((string)propMapping.Value).ToString(Formatting.Indented);
+                }
+                catch (JsonException)
+                {
+                    this.tbMapping.Text = (string)propMapping.Value;
+                }
             }
         }
 
