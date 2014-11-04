@@ -13,5 +13,7 @@ namespace Star.Layoff.DtsComponents.Common
         public const string PropColumnTypes = "ColumnTypes";
         public const string PropBatchSize = "BatchSize";
         public const string PropMapping = "Mapping";
+        public const string PropStartRow = "StartRow";
+        public const string PropEndRow = "EndRow";
     }
 }

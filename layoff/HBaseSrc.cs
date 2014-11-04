@@ -5,6 +5,7 @@ using Microsoft.SqlServer.Dts.Runtime;
 using Microsoft.SqlServer.Dts.Runtime.Wrapper;
 using org.apache.hadoop.hbase.rest.protobuf.generated;
 using Star.Layoff.DtsComponents.Common;
+using Star.Layoff.DtsComponents.Utilities;
 using System;
 using System.Collections.Generic;
 using System.Net;
@@ -40,6 +41,7 @@ namespace Star.Layoff.DtsComponents
             var propTableName = ComponentMetaData.CustomPropertyCollection.New();
             propTableName.Name = Constants.PropTableName;
             propTableName.Description = "HBase table name";
+            propTableName.ExpressionType = DTSCustomPropertyExpressionType.CPET_NOTIFY;
             propTableName.Value = string.Empty;
 
             // Add the columns property.
@@ -59,6 +61,20 @@ namespace Star.Layoff.DtsComponents
             propBatchSize.Name = Constants.PropBatchSize;
             propBatchSize.Description = "Batch size";
             propBatchSize.Value = 1024;
+
+            // Add the start row property.
+            var propStartRow = ComponentMetaData.CustomPropertyCollection.New();
+            propStartRow.Name = Constants.PropStartRow;
+            propStartRow.Description = "Start row";
+            propStartRow.ExpressionType = DTSCustomPropertyExpressionType.CPET_NOTIFY;
+            propStartRow.Value = string.Empty;
+
+            // Add the end row property.
+            var propEndRow = ComponentMetaData.CustomPropertyCollection.New();
+            propEndRow.Name = Constants.PropEndRow;
+            propEndRow.Description = "End row";
+            propEndRow.ExpressionType = DTSCustomPropertyExpressionType.CPET_NOTIFY;
+            propEndRow.Value = string.Empty;
 
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
             output.Name = "Output";
@@ -414,6 +430,18 @@ namespace Star.Layoff.DtsComponents
             {
                 batch = (int)propBatchSize.Value
             };
+
+            var propStartRow = ComponentMetaData.CustomPropertyCollection[Constants.PropStartRow];
+            if (propStartRow.Value != null && !string.IsNullOrEmpty(propStartRow.Value.ToString()))
+            {
+                scanSettings.startRow = Helpers.EncodePrefixedValue(propStartRow.Value.ToString());
+            }
+
+            var propEndRow = ComponentMetaData.CustomPropertyCollection[Constants.PropEndRow];
+            if (propEndRow.Value != null && !string.IsNullOrEmpty(propEndRow.Value.ToString()))
+            {
+                scanSettings.endRow = Helpers.EncodePrefixedValue(propEndRow.Value.ToString());
+            }
 
             var scannerInfo = this._hbaseClient.CreateScanner(propTableName.Value.ToString(), scanSettings);
             CellSet next = null;

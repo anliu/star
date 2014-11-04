@@ -41,6 +41,7 @@ namespace Star.Layoff.DtsComponents
             var propTableName = ComponentMetaData.CustomPropertyCollection.New();
             propTableName.Name = Constants.PropTableName;
             propTableName.Description = "HBase table name";
+            propTableName.ExpressionType = DTSCustomPropertyExpressionType.CPET_NOTIFY;
             propTableName.Value = string.Empty;
 
             // Add the columns property.
