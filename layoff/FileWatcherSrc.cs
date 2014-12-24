@@ -97,6 +97,7 @@ namespace Star.Layoff.DtsComponents
                             _idleEvent.Set();
                         }
                     };
+                _fileWatcher.EnableRaisingEvents = true;
                 this.Connected = true;
             }
         }
@@ -138,13 +139,13 @@ namespace Star.Layoff.DtsComponents
             }
 
             // there are only two output columns
-            // file content column
-            var col = outputMain.OutputColumnCollection[0];
-            _outputColIdInBuffer = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID);
-
             // file name column
-            col = outputMain.OutputColumnCollection[1];
+            var col = outputMain.OutputColumnCollection[0];
             _nameColIdInBuffer = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID);
+
+            // file content column
+            col = outputMain.OutputColumnCollection[1];
+            _outputColIdInBuffer = BufferManager.FindColumnByLineageID(outputMain.Buffer, col.LineageID);
         }
 
         public override void PrimeOutput(int outputs, int[] outputIDs, PipelineBuffer[] buffers)
@@ -181,7 +182,7 @@ namespace Star.Layoff.DtsComponents
                 {
                     Interlocked.Decrement(ref _changeCount);
 
-                    if (oneFile == "__stop")
+                    if (Path.GetFileName(oneFile) == "__stop")
                     {
                         // special file name to stop
                         isEOF = true;
@@ -198,12 +199,19 @@ namespace Star.Layoff.DtsComponents
                     {
                         int ioSize = 4096;
 
+                        var bom = reader.ReadBytes(3);
+                        if (bom.Length != 3 || (int)bom[0] + (int)(bom[1] << 8) + (int)(bom[2] << 16) != 0xBFBBEF)
+                        {
+                            // not utf-8 bom, write through the data
+                            bufferMain.AddBlobData(_outputColIdInBuffer, bom);
+                        }
+
                         while (true)
                         {
                             var ioData = reader.ReadBytes(ioSize);
                             if (ioData.Length > 0)
                             {
-                                bufferMain.AddBlobData(_outputColIdInBuffer, ioData, ioData.Length);
+                                bufferMain.AddBlobData(_outputColIdInBuffer, ioData);
                             }
 
                             if (ioData.Length < ioSize)
