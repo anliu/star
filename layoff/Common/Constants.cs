@@ -15,5 +15,7 @@ namespace Star.Layoff.DtsComponents.Common
         public const string PropMapping = "Mapping";
         public const string PropStartRow = "StartRow";
         public const string PropEndRow = "EndRow";
+        public const string PropFullPath = "FullPath";
+        public const string PropFilter = "Filter";
     }
 }
