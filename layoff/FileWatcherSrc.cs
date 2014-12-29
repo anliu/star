@@ -89,14 +89,25 @@ namespace Star.Layoff.DtsComponents
                 _changeCount = 0;
                 _idleEvent = new AutoResetEvent(false);
                 _fileWatcher = new FileSystemWatcher(Path.GetFullPath(_pathName));
-                _fileWatcher.Created += (sender, e) =>
+                // not using Created as Created event was fired before the file
+                // content is completedly written, which prevents us reading the
+                // file
+                //_fileWatcher.Created += (sender, e) =>
+                //    {
+                //        _queue.Enqueue(e.FullPath);
+                //        if (Interlocked.Increment(ref _changeCount) == 1)
+                //        {
+                //            _idleEvent.Set();
+                //        }
+                //    };
+                _fileWatcher.Renamed += (sender, e) =>
+                {
+                    _queue.Enqueue(e.FullPath);
+                    if (Interlocked.Increment(ref _changeCount) == 1)
                     {
-                        _queue.Enqueue(e.FullPath);
-                        if (Interlocked.Increment(ref _changeCount) == 1)
-                        {
-                            _idleEvent.Set();
-                        }
-                    };
+                        _idleEvent.Set();
+                    }
+                };
                 _fileWatcher.EnableRaisingEvents = true;
                 this.Connected = true;
             }
@@ -172,10 +183,14 @@ namespace Star.Layoff.DtsComponents
                 }
             }
 
+            // may enter wait
+            bufferMain.AddRow();
+
             bool isEOF = false;
+            string oneFile = "__stop";
+
             while (!isEOF)
             {
-                string oneFile = null;
                 _idleEvent.WaitOne();
 
                 while (_queue.TryDequeue(out oneFile))
@@ -189,12 +204,9 @@ namespace Star.Layoff.DtsComponents
                         break;
                     }
 
-                    // may enter wait
-                    bufferMain.AddRow();
-
                     bufferMain.SetString(_nameColIdInBuffer, oneFile);
 
-                    using (var f = File.Open(oneFile, FileMode.Open))
+                    using (var f = File.Open(oneFile, FileMode.Open, FileAccess.Read, FileShare.Read))
                     using (var reader = new BinaryReader(f))
                     {
                         int ioSize = 4096;
@@ -220,8 +232,15 @@ namespace Star.Layoff.DtsComponents
                             }
                         }
                     }
+
+                    // may enter wait
+                    bufferMain.AddRow();
                 }
             }
+
+            // last row
+            bufferMain.SetString(_nameColIdInBuffer, oneFile);
+            bufferMain.AddBlobData(_outputColIdInBuffer, Encoding.UTF8.GetBytes("{}"));
 
             // done
             bufferMain.SetEndOfRowset();
@@ -351,8 +370,8 @@ namespace Star.Layoff.DtsComponents
             outputcolNewError.Name = "FileName";
 
             // set the output column properties
-            outputcolNewMain.SetDataTypeProperties(DataType.DT_WSTR, 256, Precision, Scale, CodePage);
-            outputcolNewError.SetDataTypeProperties(DataType.DT_WSTR, 256, Precision, Scale, CodePage);
+            outputcolNewMain.SetDataTypeProperties(DataType.DT_WSTR, 1024, Precision, Scale, CodePage);
+            outputcolNewError.SetDataTypeProperties(DataType.DT_WSTR, 1024, Precision, Scale, CodePage);
 
             // set the default error dispositions
             outputcolNewMain.ErrorRowDisposition = DTSRowDisposition.RD_FailComponent;
@@ -374,6 +393,29 @@ namespace Star.Layoff.DtsComponents
             outputcolNewMain.ErrorRowDisposition = DTSRowDisposition.RD_FailComponent;
             outputcolNewMain.TruncationRowDisposition = DTSRowDisposition.RD_FailComponent;
             outputcolNewMain.ErrorOrTruncationOperation = "ErrorOrTruncationOperationConversion";
+
+            AddPaddingColumns(outputMain);
+        }
+
+        private void AddPaddingColumns(IDTSOutput100 mainOutput)
+        {
+            var i = mainOutput.OutputColumnCollection.Count;
+
+            // for amd64 OS this is enough to fit one row just above half of the
+            // 64k allocation unit
+            for (int j = 0; j < 4; j++)
+            {
+                var outputcolNewMain = mainOutput.OutputColumnCollection.NewAt(i + j);
+                outputcolNewMain.Name = string.Format("Padding{0}", j);
+
+                // set the output column properties
+                outputcolNewMain.SetDataTypeProperties(DataType.DT_WSTR, 3999, 0, 0, 0);
+
+                // set the default error dispositions
+                outputcolNewMain.ErrorRowDisposition = DTSRowDisposition.RD_FailComponent;
+                outputcolNewMain.TruncationRowDisposition = DTSRowDisposition.RD_FailComponent;
+                outputcolNewMain.ErrorOrTruncationOperation = "ErrorOrTruncationOperationConversion";
+            }
         }
 
         public override DTSValidationStatus Validate()
