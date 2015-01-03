@@ -52,10 +52,10 @@ namespace Star.Layoff.DtsComponents
             //propPathName.Value = string.Empty;
 
             // Add the columns property.
-            var propColumns = ComponentMetaData.CustomPropertyCollection.New();
-            propColumns.Name = Constants.PropFilter;
-            propColumns.Description = "Filter";
-            propColumns.Value = string.Empty;
+            var propFilter = ComponentMetaData.CustomPropertyCollection.New();
+            propFilter.Name = Constants.PropFilter;
+            propFilter.Description = "Filter";
+            propFilter.Value = string.Empty;
 
             IDTSOutput100 output = ComponentMetaData.OutputCollection.New();
             output.Name = "Output";
@@ -84,6 +84,8 @@ namespace Star.Layoff.DtsComponents
                     throw new Exception("The ConnectionManager " + cm.Name + " is not a connection manager.");
                 }
 
+                var propFilter = ComponentMetaData.CustomPropertyCollection[Constants.PropFilter];
+
                 _pathName = (string)cm.AcquireConnection(transaction);
                 _queue = new ConcurrentQueue<string>();
                 _changeCount = 0;
@@ -108,6 +110,12 @@ namespace Star.Layoff.DtsComponents
                         _idleEvent.Set();
                     }
                 };
+
+                if (!string.IsNullOrEmpty((string)propFilter.Value))
+                {
+                    _fileWatcher.Filter = (string)propFilter.Value;
+                }
+
                 _fileWatcher.EnableRaisingEvents = true;
                 this.Connected = true;
             }
