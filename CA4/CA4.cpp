@@ -14,6 +14,8 @@ const SIZE_T fileObjectSize = 0x3A4;
 
 const char *_7zExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.zip @listfile";
 
+const bool g_dumpRecords = false;
+
 struct FileObject
 {
     LPVOID vtable;
@@ -45,6 +47,53 @@ struct FileObject
     DWORD d12;
     DWORD d13; // 0x3a0
 };
+
+struct RecordObject
+{
+    DWORD dt;
+    DWORD time;
+    DWORD close;
+    DWORD volumeLow;
+    DWORD volumeHigh;
+    DWORD amountLow;
+    DWORD amountHigh;
+    DWORD transactions;
+    DWORD accVolumeLow;
+    DWORD accVolumeHigh;
+    DWORD accAmountLow;
+    DWORD accAmountHigh;
+    DWORD flag;
+    DWORD prices[10];
+    DWORD volumes[20];
+    DWORD reservedLow;
+    DWORD reservedHigh;
+};
+
+#define MAKELONGLONG(l, h) ((LONGLONG)(l & 0xffffffff) | (LONGLONG)h << 32)
+
+void DumpRecords(BYTE *pData, int records)
+{
+    RecordObject* pRec = (RecordObject *)pData;
+    DWORD accTxn = 0;
+    LONGLONG llReserved = MAKELONGLONG(pRec[0].reservedLow, pRec[0].reservedHigh);
+    for (int i = 0; i < records; i++)
+    {
+        DWORD txn = pRec[i].transactions;
+        if (MAKELONGLONG(pRec[i].reservedLow, pRec[i].reservedHigh) != llReserved)
+        {
+            txn = pRec[i].transactions - accTxn;
+            llReserved = MAKELONGLONG(pRec[i].reservedLow, pRec[i].reservedHigh);
+            accTxn = pRec[i].transactions;
+        }
+        else
+        {
+            accTxn += pRec[i].transactions;
+        }
+        printf("%u %06u %u %u %I64u %I64u\n", pRec[i].dt, pRec[i].time, pRec[i].close, txn,
+                MAKELONGLONG(pRec[i].amountLow, pRec[i].amountHigh),
+                MAKELONGLONG(pRec[i].volumeLow, pRec[i].volumeHigh));
+    }
+}
 
 int _tmain_message(int argc, _TCHAR* argv[])
 {
@@ -163,6 +212,18 @@ int _tmain_message(int argc, _TCHAR* argv[])
         else
         {
             printf("failed to open [%s].\n", scodesel);
+        }
+
+        if (bytesRead % fbRecordSize == 0)
+        {
+            if (g_dumpRecords)
+            {
+                DumpRecords(pData, bytesRead / fbRecordSize);
+            }
+        }
+        else
+        {
+            printf("probably wrong buffer length!\n");
         }
         delete pData;
     }
