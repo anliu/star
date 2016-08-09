@@ -12,9 +12,8 @@ const SIZE_T fbRecordSize = 0xB4;
 const LPVOID fileObjectAddr = (LPVOID)0x4101d8;
 const SIZE_T fileObjectSize = 0x3A4;
 
-const char *_7zExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.zip @listfile";
-
 const bool g_dumpRecords = false;
+const bool g_doPackage = false;
 
 struct FileObject
 {
@@ -69,6 +68,28 @@ struct RecordObject
     DWORD reservedHigh;
 };
 
+const char *_7zExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.zip @listfile";
+
+void Start7z()
+{
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    ZeroMemory(&pi, sizeof(pi));
+    if (!CreateProcessA(NULL, (LPSTR)_7zExe,
+        NULL, NULL, FALSE, 0, NULL,
+        NULL, // current directory
+        &si,
+        &pi))
+    {
+        printf("CreateProcess failed (%d)\n", GetLastError());
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+}
+
 #define MAKELONGLONG(l, h) ((LONGLONG)(l & 0xffffffff) | (LONGLONG)h << 32)
 
 void DumpRecords(BYTE *pData, int records)
@@ -109,16 +130,16 @@ int _tmain_message(int argc, _TCHAR* argv[])
         return 0;
     }
 
-    char p[0x100];
-    ZeroMemory(p, sizeof(p));
-    strcpy_s(p, sizeof(p), argv[1]);
+    char fn[0x100];
+    ZeroMemory(fn, sizeof(fn));
+    strcpy_s(fn, sizeof(fn), argv[1]);
 
     FILE *paramfp = NULL;
     int err = fopen_s(&paramfp, "dzhtest.exe.param", "rb+");
     if (!err)
     {
         fseek(paramfp, 0, FILE_BEGIN);
-        fwrite(p, sizeof(char), sizeof(p), paramfp);
+        fwrite(fn, sizeof(char), sizeof(fn), paramfp);
         fseek(paramfp, 0x110, FILE_BEGIN);
         if (argv[2][0] == 'h')
         {
@@ -138,7 +159,6 @@ int _tmain_message(int argc, _TCHAR* argv[])
         return -1;
     }
 
-    char fn[0x100];
     GetCurrentDirectoryA(sizeof(fn), fn);
     strcat_s(fn, sizeof(fn), "\\dzhtest.exe");
 
@@ -147,10 +167,10 @@ int _tmain_message(int argc, _TCHAR* argv[])
     ZeroMemory(&si, sizeof(si));
     ZeroMemory(&pi, sizeof(pi));
     if (!CreateProcessA(NULL, fn,
-            NULL, NULL, FALSE, 0, NULL,
-            NULL, // current directory
-            &si,
-            &pi))
+        NULL, NULL, FALSE, 0, NULL,
+        NULL, // current directory
+        &si,
+        &pi))
     {
         printf("CreateProcess failed (%d)\n", GetLastError());
         return -2;
@@ -187,9 +207,6 @@ int _tmain_message(int argc, _TCHAR* argv[])
         LRESULT re = SendMessage(cbWnd, CB_SETCURSEL, (WPARAM)i, 0);
 
         re = SendMessage(cbWnd, WM_GETTEXT, (WPARAM)sizeof(scodesel), (LPARAM)scodesel);
-        strncpy_s(flpointer, (size_t) re + 1, scodesel, (size_t) re);
-        flpointer[re] = '\r';
-        flpointer = flpointer + re + 1;
 
         re = SendMessage(target, WM_COMMAND, MAKEWPARAM(btnDecompId, BN_CLICKED), (LPARAM)btnWnd);
 
@@ -200,18 +217,29 @@ int _tmain_message(int argc, _TCHAR* argv[])
             printf("decoded data buffer changed! %p %p", initial, fo.decodedata);
         }
 
+        if (!fo.decodesize)
+        {
+            continue;
+        }
+
         BYTE *pData = new BYTE[fo.decodesize];
         ReadProcessMemory(pi.hProcess, fo.decodedata, pData, fo.decodesize, &bytesRead);
+
+        size_t cnt = sprintf_s(fn, sizeof(scodesel), "%d%s", *(DWORD *)pData, scodesel);
         FILE *outfp = NULL;
-        err = fopen_s(&outfp, scodesel, "wb");
+        err = fopen_s(&outfp, fn, "wb");
         if (!err)
         {
             fwrite(pData, 1, bytesRead, outfp);
             fclose(outfp);
+
+            strncpy_s(flpointer, cnt + 1, fn, cnt);
+            flpointer[cnt] = '\r';
+            flpointer = flpointer + cnt + 1;
         }
         else
         {
-            printf("failed to open [%s].\n", scodesel);
+            printf("failed to open [%s].\n", fn);
         }
 
         if (bytesRead % fbRecordSize == 0)
@@ -242,25 +270,14 @@ int _tmain_message(int argc, _TCHAR* argv[])
     delete fl;
 
     SendMessage(target, WM_COMMAND, MAKEWPARAM(btnCancelId, BN_CLICKED), (LPARAM)GetDlgItem(target, btnCancelId));
-    WaitForSingleObject( pi.hProcess, INFINITE );
-    CloseHandle( pi.hProcess );
-    CloseHandle( pi.hThread );
-
-    ZeroMemory(&si, sizeof(si));
-    ZeroMemory(&pi, sizeof(pi));
-    if (!CreateProcessA(NULL, (LPSTR)_7zExe,
-        NULL, NULL, FALSE, 0, NULL,
-        NULL, // current directory
-        &si,
-        &pi))
-    {
-        printf("CreateProcess failed (%d)\n", GetLastError());
-        return -2;
-    }
-
     WaitForSingleObject(pi.hProcess, INFINITE);
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
+
+    if (g_doPackage)
+    {
+        Start7z();
+    }
 
     return 0;
 }
