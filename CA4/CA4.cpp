@@ -13,7 +13,8 @@ const LPVOID fileObjectAddr = (LPVOID)0x4101d8;
 const SIZE_T fileObjectSize = 0x3A4;
 
 const bool g_dumpRecords = false;
-const bool g_doPackage = false;
+const bool g_doPackage = true;
+const bool g_use7z = true;
 
 struct FileObject
 {
@@ -68,7 +69,8 @@ struct RecordObject
     DWORD reservedHigh;
 };
 
-const char *_7zExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.zip @listfile";
+const char *_7zExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.7z @listfile";
+const char *_7zipExe = "\"c:\\Program Files\\7-Zip\\7z.exe\" a -sdel output.zip @listfile";
 
 void Start7z()
 {
@@ -76,7 +78,7 @@ void Start7z()
     PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si));
     ZeroMemory(&pi, sizeof(pi));
-    if (!CreateProcessA(NULL, (LPSTR)_7zExe,
+    if (!CreateProcessA(NULL, g_use7z ? (LPSTR)_7zExe : (LPSTR)_7zipExe,
         NULL, NULL, FALSE, 0, NULL,
         NULL, // current directory
         &si,
@@ -177,7 +179,7 @@ int _tmain_message(int argc, _TCHAR* argv[])
     }
 
     // wait for dzhtest bootstrap
-    WaitForSingleObject(pi.hProcess, 3000);
+    WaitForSingleObject(pi.hProcess, 1500);
 
     HWND target = FindWindowA(NULL, "dzhtest");
     if (!target)
