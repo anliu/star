@@ -118,6 +118,24 @@ void DumpRecords(BYTE *pData, int records)
     }
 }
 
+bool IsValidCode(char *code, size_t len)
+{
+    if (len != 6)
+    {
+        return false;
+    }
+
+    for (size_t i = 0; i < len; i++)
+    {
+        if (code[i] > '9' || code[i] < '0')
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int _tmain_message(int argc, _TCHAR* argv[])
 {
     if (argc != 3)
@@ -209,6 +227,11 @@ int _tmain_message(int argc, _TCHAR* argv[])
         LRESULT re = SendMessage(cbWnd, CB_SETCURSEL, (WPARAM)i, 0);
 
         re = SendMessage(cbWnd, WM_GETTEXT, (WPARAM)sizeof(scodesel), (LPARAM)scodesel);
+        if (!IsValidCode(scodesel, re))
+        {
+            printf("invalid code %s\n", scodesel);
+            continue;
+        }
 
         re = SendMessage(target, WM_COMMAND, MAKEWPARAM(btnDecompId, BN_CLICKED), (LPARAM)btnWnd);
 
