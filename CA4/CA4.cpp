@@ -290,7 +290,7 @@ int _tmain_message(int argc, _TCHAR* argv[])
     }
     else
     {
-        printf("failed to open [%s].\n", "listfile");
+        printf("failed to open [listfile].\n");
     }
     delete fl;
 
@@ -406,18 +406,6 @@ int _tmain_inject(int argc, _TCHAR* argv[])
 int _tmain(int argc, _TCHAR* argv[])
 {
     // return _tmain_inject(argc, argv);
-
-    //FILE *fp = fopen("C:\\BaiduYunDownload\\DN.txt", "rb");
-    //fseek(fp, -100L * 1024L * 1024L, FILE_END);
-    //if (fp){
-    //    for (int i = 0; i < 10; i++)
-    //    {
-    //        BYTE buf[256];
-    //        fread(buf, 1, 256, fp);
-    //        printf("%d", buf[0]);
-    //    }
-    //    fclose(fp);
-    //}
 
     return _tmain_message(argc, argv);
 }
