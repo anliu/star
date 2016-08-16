@@ -239,11 +239,15 @@ int _tmain_message(int argc, _TCHAR* argv[])
 
         if (initial && fo.decodedata != initial)
         {
-            printf("decoded data buffer changed! %p %p", initial, fo.decodedata);
+            printf("decoded data buffer changed! %p %p\n", initial, fo.decodedata);
         }
 
         if (!fo.decodesize)
         {
+            if (fo.error[0])
+            {
+                printf("decode [%s] error: %s\n", scodesel, fo.error);
+            }
             continue;
         }
 
